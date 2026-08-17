@@ -1,50 +1,57 @@
-package com.elctrovotesuperx.view;
+package com.elctrovotesuperx.view.AdminView;
+
+
+import com.elctrovotesuperx.view.Page;
+import com.elctrovotesuperx.view.HomePageView.Homepage;
 
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.layout.VBox;
-import javafx.stage.Stage;
 
-public class ElectionPage {
+public class ElectionPage implements Page {
 
-    private final Stage stage;
-    private final Scene scene;
+    private Scene scene;
 
-    public ElectionPage(Stage stage) {
+    @Override
+    public Scene getScene(Runnable adminCallback) {
 
-        this.stage = stage;
-
-        Label title = new Label("Election Management");
+        Label title =
+                new Label("Election Management");
 
         title.setStyle(
-                "-fx-font-size: 28px;" +
-                "-fx-font-weight: bold;"
+            "-fx-font-size: 28px;" +
+            "-fx-font-weight: bold;"
         );
 
-        Button backButton = new Button("Back to Home");
+        Button backButton =
+                new Button("Back to Admin Dashboard");
 
         backButton.setOnAction(event -> {
 
-            HomePage homePage =
-                    new HomePage(stage);
+            adminCallback.run();
 
-            stage.setScene(homePage.getScene());
         });
 
-        VBox root = new VBox(
-                20,
-                title,
-                backButton
+        VBox root =
+                new VBox(
+                    20,
+                    title,
+                    backButton
+                );
+
+        root.setAlignment(
+            Pos.CENTER
         );
 
-        root.setAlignment(Pos.CENTER);
+        scene =
+                new Scene(
+                    root,
+                    1200,
+                    700
+                );
 
-        scene = new Scene(root, 1200, 700);
-    }
-
-    public Scene getScene() {
         return scene;
     }
 }

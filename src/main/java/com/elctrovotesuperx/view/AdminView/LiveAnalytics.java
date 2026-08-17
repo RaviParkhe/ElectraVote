@@ -1,4 +1,4 @@
-package com.elctrovotesuperx.view.OnlineVotingView;
+package com.elctrovotesuperx.view.AdminView;
 
 import com.elctrovotesuperx.view.Page;
 
@@ -9,7 +9,7 @@ import javafx.scene.control.*;
 import javafx.scene.layout.VBox;
 import javafx.scene.text.Font;
 
-public class OnlineVotingDashboard implements Page {
+public class LiveAnalytics implements Page {
 
     private Scene scene;
 
@@ -21,12 +21,12 @@ public class OnlineVotingDashboard implements Page {
         box.setPadding(new Insets(35));
         box.setStyle("-fx-background-color: #F5F7FB;");
 
-        Label title = new Label("Online Voting");
+        Label title = new Label("Live Analytics");
         title.setFont(Font.font("Arial", 28));
         title.setStyle("-fx-font-weight: bold; -fx-text-fill: #172554;");
 
         Label description = new Label(
-            "ElectraVote module: Online Voting. This screen is ready for your business logic."
+            "ElectraVote module: Live Analytics. This screen is ready for your business logic."
         );
         description.setStyle("-fx-text-fill: #64748B;");
 
@@ -44,11 +44,24 @@ public class OnlineVotingDashboard implements Page {
 
         box.getChildren().addAll(title, description, status);
 
-        Button vote = new Button("Cast Secret Ballot");
-        vote.setOnAction(e -> status.setText(
-            "Demo token generated → vote recorded → token burned."
-        ));
-        box.getChildren().add(vote);
+        Button refresh = new Button("Run Analytics in Background");
+        refresh.setOnAction(e -> {
+            javafx.concurrent.Task<String> task = new javafx.concurrent.Task<>() {
+                @Override
+                protected String call() throws Exception {
+                    updateMessage("Calculating...");
+                    Thread.sleep(1200);
+                    return "Analytics updated successfully";
+                }
+            };
+            task.setOnSucceeded(x -> status.setText(task.getValue()));
+            task.setOnFailed(x -> status.setText("Analytics failed"));
+            status.textProperty().bind(task.messageProperty());
+            Thread worker = new Thread(task, "ElectraVote-Analytics");
+            worker.setDaemon(true);
+            worker.start();
+        });
+        box.getChildren().add(refresh);
 
         box.getChildren().add(back);
 

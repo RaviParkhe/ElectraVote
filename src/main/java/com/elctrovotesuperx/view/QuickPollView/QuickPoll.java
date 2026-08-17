@@ -1,4 +1,4 @@
-package com.elctrovotesuperx.view.OnlineVotingView;
+package com.elctrovotesuperx.view.QuickPollView;
 
 import com.elctrovotesuperx.view.Page;
 
@@ -9,7 +9,7 @@ import javafx.scene.control.*;
 import javafx.scene.layout.VBox;
 import javafx.scene.text.Font;
 
-public class OnlineVotingDashboard implements Page {
+public class QuickPoll implements Page {
 
     private Scene scene;
 
@@ -21,12 +21,12 @@ public class OnlineVotingDashboard implements Page {
         box.setPadding(new Insets(35));
         box.setStyle("-fx-background-color: #F5F7FB;");
 
-        Label title = new Label("Online Voting");
+        Label title = new Label("Quick Poll");
         title.setFont(Font.font("Arial", 28));
         title.setStyle("-fx-font-weight: bold; -fx-text-fill: #172554;");
 
         Label description = new Label(
-            "ElectraVote module: Online Voting. This screen is ready for your business logic."
+            "ElectraVote module: Quick Poll. This screen is ready for your business logic."
         );
         description.setStyle("-fx-text-fill: #64748B;");
 
@@ -44,11 +44,11 @@ public class OnlineVotingDashboard implements Page {
 
         box.getChildren().addAll(title, description, status);
 
-        Button vote = new Button("Cast Secret Ballot");
-        vote.setOnAction(e -> status.setText(
-            "Demo token generated → vote recorded → token burned."
+        Button poll = new Button("Submit Quick Poll");
+        poll.setOnAction(e -> status.setText(
+            "Poll submitted. Results updated."
         ));
-        box.getChildren().add(vote);
+        box.getChildren().add(poll);
 
         box.getChildren().add(back);
 

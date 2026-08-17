@@ -1,4 +1,18 @@
-package com.elctrovotesuperx.view;
+
+package com.elctrovotesuperx.view.HomePageView;
+
+import com.elctrovotesuperx.view.Page;
+import com.elctrovotesuperx.view.CommonView.Sidebar;
+
+import com.elctrovotesuperx.view.OrganizationView.Organizations;
+import com.elctrovotesuperx.view.AdminView.AdminDashboard;
+import com.elctrovotesuperx.view.AdminView.Members;
+import com.elctrovotesuperx.view.AdminView.CandidateDashboard;
+import com.elctrovotesuperx.view.AdminView.ElectionPage;
+import com.elctrovotesuperx.view.AdminView.Results;
+import com.elctrovotesuperx.view.AdminView.Reports;
+import com.elctrovotesuperx.view.AdminView.Notifications;
+import com.elctrovotesuperx.view.AdminView.Profile;
 
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -6,210 +20,879 @@ import javafx.scene.Scene;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.layout.BorderPane;
+import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
+import javafx.scene.layout.Priority;
+import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
+import javafx.scene.paint.Color;
+import javafx.scene.shape.Circle;
+import javafx.scene.text.Font;
+import javafx.scene.text.FontWeight;
 import javafx.stage.Stage;
 
-public class HomePage {
+public class Homepage implements Page {
 
-    public final Stage stage;
-    public final Scene scene ;
+    private final Stage stage;
 
-    public Scene getScene(Scene scene) {
+    private Scene homeScene;
 
-        
+    private Sidebar sidebar;
 
-        // =========================
-        // Header
-        // =========================
+    // =========================================================
+    // CONSTRUCTOR
+    // =========================================================
 
-        Label title = new Label("ElectraVote");
-        title.setStyle(
-                "-fx-font-size: 28px;" +
-                "-fx-font-weight: bold;"
-        );
+    public Homepage(Stage stage) {
+        this.stage = stage;
+    }
 
-        Label subtitle = new Label(
-                "Secure Multi-Organization Election Platform"
-        );
+    // =========================================================
+    // GET SCENE
+    // =========================================================
 
-        VBox logoBox = new VBox(5, title, subtitle);
+    @Override
+    public Scene getScene(Runnable loginCallback) {
 
-        // =========================
-        // Navigation Buttons
-        // =========================
-
-        Button homeButton = new Button("Home");
-        Button electionButton = new Button("Elections");
-        Button pollButton = new Button("Quick Poll");
-        Button voterButton = new Button("Voter Dashboard");
-        Button adminButton = new Button("Admin Dashboard");
-        Button candidateButton = new Button("Candidate Dashboard");
-        Button logoutButton = new Button("Logout");
-
-        // Button sizes
-
-        homeButton.setPrefWidth(150);
-        electionButton.setPrefWidth(150);
-        pollButton.setPrefWidth(150);
-        voterButton.setPrefWidth(150);
-        adminButton.setPrefWidth(150);
-        candidateButton.setPrefWidth(150);
-        logoutButton.setPrefWidth(150);
-
-        // =========================
-        // Navigation Bar
-        // =========================
-
-        HBox navigation = new HBox(
-                10,
-                homeButton,
-                electionButton,
-                pollButton,
-                voterButton,
-                adminButton,
-                candidateButton,
-                logoutButton
-        );
-
-        navigation.setAlignment(Pos.CENTER);
-        navigation.setPadding(new Insets(15));
-
-        // =========================
-        // Welcome Section
-        // =========================
-
-        Label welcome = new Label("Welcome to ElectraVote");
-
-        welcome.setStyle(
-                "-fx-font-size: 30px;" +
-                "-fx-font-weight: bold;"
-        );
-
-        Label description = new Label(
-                "A secure platform for elections, voting and democratic governance."
-        );
-
-        Button startVotingButton = new Button("View Elections");
-
-        startVotingButton.setPrefWidth(180);
-        startVotingButton.setPrefHeight(40);
-
-        VBox centerContent = new VBox(
-                20,
-                welcome,
-                description,
-                startVotingButton
-        );
-
-        centerContent.setAlignment(Pos.CENTER);
-
-        // =========================
-        // Statistics
-        // =========================
-
-        Label elections = new Label("Active Elections\n3");
-        Label voters = new Label("Registered Voters\n1,250");
-        Label polls = new Label("Quick Polls\n8");
-
-        elections.setStyle("-fx-font-size: 18px;");
-        voters.setStyle("-fx-font-size: 18px;");
-        polls.setStyle("-fx-font-size: 18px;");
-
-        HBox statistics = new HBox(
-                50,
-                elections,
-                voters,
-                polls
-        );
-
-        statistics.setAlignment(Pos.CENTER);
-
-        // =========================
-        // Main Layout
-        // =========================
+        // =====================================================
+        // ROOT
+        // =====================================================
 
         BorderPane root = new BorderPane();
 
-        root.setTop(new VBox(10, logoBox, navigation));
+        root.setStyle(
+            "-fx-background-color: #F5F7FB;"
+        );
 
-        root.setCenter(centerContent);
+        // =====================================================
+        // SIDEBAR
+        // =====================================================
 
-        root.setBottom(statistics);
+        sidebar = new Sidebar();
 
-        BorderPane.setAlignment(logoBox, Pos.CENTER_LEFT);
+        root.setLeft(
+            sidebar.getSidebar()
+        );
 
-        root.setPadding(new Insets(20));
+        // =====================================================
+        // MAIN CONTENT
+        // =====================================================
 
-        // =========================
-        // Navigation Actions
-        // =========================
+        VBox content = new VBox(24);
 
-        homeButton.setOnAction(event -> {
-            stage.setScene(scene);
-        });
+        content.setPadding(
+            new Insets(30, 35, 35, 35)
+        );
 
-        electionButton.setOnAction(event -> {
-            ElectionPage electionPage = new ElectionPage(stage);
-            stage.setScene(electionPage.getScene());
-        });
+        content.setStyle(
+            "-fx-background-color: #F5F7FB;"
+        );
 
-        pollButton.setOnAction(event -> {
-            System.out.println("Quick Poll Page is under construction.");
-            // QuickPollPage pollPage = new QuickPollPage(stage);
-            // stage.setScene(pollPage.getScene());
-        });
+        // =====================================================
+        // HEADER
+        // =====================================================
 
-        voterButton.setOnAction(event -> {
-            System.out.println("Voter Dashboard is under construction.");
+        HBox header = new HBox();
 
-        //     VoterDashboard voterDashboard =
-        //             new VoterDashboard(stage);
+        header.setAlignment(
+            Pos.CENTER_LEFT
+        );
 
-        //     stage.setScene(voterDashboard.getScene());
-         });
+        VBox headerText = new VBox(5);
 
-        adminButton.setOnAction(event -> {
-            System.out.println("Admin Dashboard is under construction.");
-            // AdminDashboard adminDashboard =
-            //         new AdminDashboard(stage);
+        Label welcome = new Label(
+            "Welcome back, Admin"
+        );
 
-            // stage.setScene(adminDashboard.getScene());
-        });
+        welcome.setFont(
+            Font.font(
+                "Arial",
+                FontWeight.BOLD,
+                30
+            )
+        );
 
-         candidateButton.setOnAction(event -> {
-            System.out.println("Candidate Dashboard is under construction.");
-        //     CandidateDashboard candidateDashboard =
-        //             new CandidateDashboard(stage);
+        welcome.setStyle(
+            "-fx-text-fill: #172554;"
+        );
 
-        //     stage.setScene(candidateDashboard.getScene());
-        });
+        Label subtitle = new Label(
+            "Manage your organization's elections, members and governance."
+        );
 
-        startVotingButton.setOnAction(event -> {
-            System.out.println("Election Page is under construction.");
+        subtitle.setStyle(
+            "-fx-text-fill: #64748B;" +
+            "-fx-font-size: 14px;"
+        );
 
-            // ElectionPage electionPage =
-            //         new ElectionPage(stage);
+        headerText.getChildren().addAll(
+            welcome,
+            subtitle
+        );
 
-            // stage.setScene(electionPage.getScene());
-        });
+        Region headerSpacer = new Region();
 
-        logoutButton.setOnAction(event -> {
-            System.out.println("Logout functionality is under construction.");
-            // LoginPage loginPage =
-            //         new LoginPage(stage);
+        HBox.setHgrow(
+            headerSpacer,
+            Priority.ALWAYS
+        );
 
-            // stage.setScene(loginPage.getScene());
-        });
+        // =====================================================
+        // ORGANIZATION BADGE
+        // =====================================================
 
-        // =========================
-        // Scene
-        // =========================
+        VBox organizationBox = new VBox(3);
 
-        scene = new Scene(root, 1200, 700);
-    
+        organizationBox.setAlignment(
+            Pos.CENTER_RIGHT
+        );
 
-     
-        return scene;
+        Label organizationLabel = new Label(
+            "CURRENT ORGANIZATION"
+        );
+
+        organizationLabel.setStyle(
+            "-fx-font-size: 10px;" +
+            "-fx-font-weight: bold;" +
+            "-fx-text-fill: #94A3B8;"
+        );
+
+        Label organizationName = new Label(
+            "Zeal College of Engineering"
+        );
+
+        organizationName.setStyle(
+            "-fx-font-size: 14px;" +
+            "-fx-font-weight: bold;" +
+            "-fx-text-fill: #172554;"
+        );
+
+        organizationBox.getChildren().addAll(
+            organizationLabel,
+            organizationName
+        );
+
+        header.getChildren().addAll(
+            headerText,
+            headerSpacer,
+            organizationBox
+        );
+
+        // =====================================================
+        // STATISTICS
+        // =====================================================
+
+        GridPane statsGrid = new GridPane();
+
+        statsGrid.setHgap(18);
+        statsGrid.setVgap(18);
+
+        VBox membersCard = statCard(
+            "♧",
+            "Members",
+            "245",
+            "Registered members"
+        );
+
+        VBox candidatesCard = statCard(
+            "♙",
+            "Candidates",
+            "18",
+            "Active candidates"
+        );
+
+        VBox electionsCard = statCard(
+            "☑",
+            "Elections",
+            "06",
+            "Total elections"
+        );
+
+        VBox turnoutCard = statCard(
+            "◷",
+            "Voter Turnout",
+            "78%",
+            "Current participation"
+        );
+
+        statsGrid.add(
+            membersCard,
+            0,
+            0
+        );
+
+        statsGrid.add(
+            candidatesCard,
+            1,
+            0
+        );
+
+        statsGrid.add(
+            electionsCard,
+            2,
+            0
+        );
+
+        statsGrid.add(
+            turnoutCard,
+            3,
+            0
+        );
+
+        // =====================================================
+        // MIDDLE SECTION
+        // =====================================================
+
+        HBox middleSection = new HBox(20);
+
+        // =====================================================
+        // ELECTION ACTIVITY
+        // =====================================================
+
+        VBox activityCard = new VBox(18);
+
+        activityCard.setPadding(
+            new Insets(22)
+        );
+
+        activityCard.setStyle(
+            "-fx-background-color: white;" +
+            "-fx-background-radius: 14;" +
+            "-fx-border-color: #E2E8F0;" +
+            "-fx-border-radius: 14;"
+        );
+
+        HBox activityHeader = new HBox();
+
+        Label activityTitle = new Label(
+            "Election Activity"
+        );
+
+        activityTitle.setFont(
+            Font.font(
+                "Arial",
+                FontWeight.BOLD,
+                18
+            )
+        );
+
+        activityTitle.setStyle(
+            "-fx-text-fill: #172554;"
+        );
+
+        Region activitySpacer = new Region();
+
+        HBox.setHgrow(
+            activitySpacer,
+            Priority.ALWAYS
+        );
+
+        Label activityStatus = new Label(
+            "LIVE"
+        );
+
+        activityStatus.setStyle(
+            "-fx-background-color: #DCFCE7;" +
+            "-fx-text-fill: #15803D;" +
+            "-fx-font-size: 11px;" +
+            "-fx-font-weight: bold;" +
+            "-fx-padding: 5 10 5 10;" +
+            "-fx-background-radius: 10;"
+        );
+
+        activityHeader.getChildren().addAll(
+            activityTitle,
+            activitySpacer,
+            activityStatus
+        );
+
+        // Fake static activity bars
+
+        HBox chart = new HBox(
+            14
+        );
+
+        chart.setAlignment(
+            Pos.BOTTOM_LEFT
+        );
+
+        chart.setPrefHeight(150);
+
+        chart.getChildren().addAll(
+            chartBar(65),
+            chartBar(90),
+            chartBar(45),
+            chartBar(115),
+            chartBar(80),
+            chartBar(125),
+            chartBar(100)
+        );
+
+        HBox days = new HBox(
+            27
+        );
+
+        days.getChildren().addAll(
+            chartLabel("Mon"),
+            chartLabel("Tue"),
+            chartLabel("Wed"),
+            chartLabel("Thu"),
+            chartLabel("Fri"),
+            chartLabel("Sat"),
+            chartLabel("Sun")
+        );
+
+        activityCard.getChildren().addAll(
+            activityHeader,
+            chart,
+            days
+        );
+
+        HBox.setHgrow(
+            activityCard,
+            Priority.ALWAYS
+        );
+
+        // =====================================================
+        // ORGANIZATION HEALTH
+        // =====================================================
+
+        VBox healthCard = new VBox(18);
+
+        healthCard.setPadding(
+            new Insets(22)
+        );
+
+        healthCard.setPrefWidth(
+            320
+        );
+
+        healthCard.setStyle(
+            "-fx-background-color: white;" +
+            "-fx-background-radius: 14;" +
+            "-fx-border-color: #E2E8F0;" +
+            "-fx-border-radius: 14;"
+        );
+
+        Label healthTitle = new Label(
+            "Organization Health"
+        );
+
+        healthTitle.setFont(
+            Font.font(
+                "Arial",
+                FontWeight.BOLD,
+                18
+            )
+        );
+
+        healthTitle.setStyle(
+            "-fx-text-fill: #172554;"
+        );
+
+        VBox scoreBox = new VBox(5);
+
+        scoreBox.setAlignment(
+            Pos.CENTER
+        );
+
+        Circle scoreCircle = new Circle(
+            58
+        );
+
+        scoreCircle.setFill(
+            Color.web("#EEF2FF")
+        );
+
+        Label score = new Label(
+            "92%"
+        );
+
+        score.setFont(
+            Font.font(
+                "Arial",
+                FontWeight.BOLD,
+                26
+            )
+        );
+
+        score.setStyle(
+            "-fx-text-fill: #3264E5;"
+        );
+
+        HBox scoreContainer = new HBox(
+            score
+        );
+
+        scoreContainer.setAlignment(
+            Pos.CENTER
+        );
+
+        scoreBox.getChildren().addAll(
+            scoreContainer
+        );
+
+        Label healthDescription = new Label(
+            "Healthy governance environment"
+        );
+
+        healthDescription.setStyle(
+            "-fx-text-fill: #64748B;" +
+            "-fx-font-size: 13px;"
+        );
+
+        healthDescription.setWrapText(
+            true
+        );
+
+        healthCard.getChildren().addAll(
+            healthTitle,
+            scoreBox,
+            healthDescription
+        );
+
+        middleSection.getChildren().addAll(
+            activityCard,
+            healthCard
+        );
+
+        // =====================================================
+        // RECENT ELECTIONS
+        // =====================================================
+
+        VBox electionsCardBox = new VBox(15);
+
+        electionsCardBox.setPadding(
+            new Insets(22)
+        );
+
+        electionsCardBox.setStyle(
+            "-fx-background-color: white;" +
+            "-fx-background-radius: 14;" +
+            "-fx-border-color: #E2E8F0;" +
+            "-fx-border-radius: 14;"
+        );
+
+        Label recentTitle = new Label(
+            "Recent Elections"
+        );
+
+        recentTitle.setFont(
+            Font.font(
+                "Arial",
+                FontWeight.BOLD,
+                18
+            )
+        );
+
+        recentTitle.setStyle(
+            "-fx-text-fill: #172554;"
+        );
+
+        VBox election1 = electionRow(
+            "Student Council Election",
+            "245 voters",
+            "ACTIVE"
+        );
+
+        VBox election2 = electionRow(
+            "Board Election",
+            "180 voters",
+            "UPCOMING"
+        );
+
+        VBox election3 = electionRow(
+            "General Secretary Election",
+            "210 voters",
+            "COMPLETED"
+        );
+
+        electionsCardBox.getChildren().addAll(
+            recentTitle,
+            election1,
+            election2,
+            election3
+        );
+
+        // =====================================================
+        // QUICK ACTIONS
+        // =====================================================
+
+        HBox quickActions = new HBox(15);
+
+        Label quickTitle = new Label(
+            "Quick Actions"
+        );
+
+        quickTitle.setFont(
+            Font.font(
+                "Arial",
+                FontWeight.BOLD,
+                18
+            )
+        );
+
+        quickTitle.setStyle(
+            "-fx-text-fill: #172554;"
+        );
+
+        Button createElection = actionButton(
+            "☑  Create Election"
+        );
+
+        Button manageMembers = actionButton(
+            "♧  Manage Members"
+        );
+
+        Button viewReports = actionButton(
+            "▤  View Reports"
+        );
+
+        VBox quickBox = new VBox(15);
+
+        quickBox.getChildren().add(
+            quickTitle
+        );
+
+        quickActions.getChildren().addAll(
+            createElection,
+            manageMembers,
+            viewReports
+        );
+
+        quickBox.getChildren().add(
+            quickActions
+        );
+
+        // =====================================================
+        // ADD CONTENT
+        // =====================================================
+
+        content.getChildren().addAll(
+            header,
+            statsGrid,
+            middleSection,
+            electionsCardBox,
+            quickBox
+        );
+
+        // =====================================================
+        // SIDEBAR NAVIGATION
+        // =====================================================
+
+        sidebar.getHome().setOnAction(
+            e -> stage.setScene(homeScene)
+        );
+
+        sidebar.getOrganizations().setOnAction(
+            e -> open(new Organizations())
+        );
+
+        sidebar.getAdmin().setOnAction(
+            e -> open(new AdminDashboard())
+        );
+
+        sidebar.getMembers().setOnAction(
+            e -> open(new Members())
+        );
+
+        sidebar.getCandidates().setOnAction(
+            e -> open(new CandidateDashboard())
+        );
+
+        sidebar.getElections().setOnAction(
+            e -> open(new ElectionPage())
+        );
+
+        sidebar.getResults().setOnAction(
+            e -> open(new Results())
+        );
+
+        sidebar.getReports().setOnAction(
+            e -> open(new Reports())
+        );
+
+        sidebar.getNotifications().setOnAction(
+            e -> open(new Notifications())
+        );
+
+        sidebar.getProfile().setOnAction(
+            e -> open(new Profile())
+        );
+
+        sidebar.getLogout().setOnAction(
+            e -> loginCallback.run()
+        );
+
+        // =====================================================
+        // ROOT
+        // =====================================================
+
+        root.setCenter(
+            content
+        );
+
+        // =====================================================
+        // SCENE
+        // =====================================================
+
+        homeScene = new Scene(
+            root,
+            1200,
+            700
+        );
+
+        return homeScene;
+    }
+
+    // =========================================================
+    // OPEN PAGE
+    // =========================================================
+
+    private void open(Page page) {
+
+        stage.setScene(
+            page.getScene(
+                () -> stage.setScene(homeScene)
+            )
+        );
+    }
+
+    // =========================================================
+    // STAT CARD
+    // =========================================================
+
+    private VBox statCard(
+            String icon,
+            String title,
+            String value,
+            String description) {
+
+        VBox card = new VBox(10);
+
+        card.setPadding(
+            new Insets(18)
+        );
+
+        card.setPrefWidth(
+            210
+        );
+
+        card.setStyle(
+            "-fx-background-color: white;" +
+            "-fx-background-radius: 14;" +
+            "-fx-border-color: #E2E8F0;" +
+            "-fx-border-radius: 14;"
+        );
+
+        Label iconLabel = new Label(
+            icon
+        );
+
+        iconLabel.setStyle(
+            "-fx-font-size: 22px;" +
+            "-fx-text-fill: #3264E5;"
+        );
+
+        Label titleLabel = new Label(
+            title
+        );
+
+        titleLabel.setStyle(
+            "-fx-font-size: 13px;" +
+            "-fx-text-fill: #64748B;"
+        );
+
+        Label valueLabel = new Label(
+            value
+        );
+
+        valueLabel.setFont(
+            Font.font(
+                "Arial",
+                FontWeight.BOLD,
+                25
+            )
+        );
+
+        valueLabel.setStyle(
+            "-fx-text-fill: #172554;"
+        );
+
+        Label descriptionLabel = new Label(
+            description
+        );
+
+        descriptionLabel.setStyle(
+            "-fx-font-size: 11px;" +
+            "-fx-text-fill: #94A3B8;"
+        );
+
+        card.getChildren().addAll(
+            iconLabel,
+            titleLabel,
+            valueLabel,
+            descriptionLabel
+        );
+
+        return card;
+    }
+
+    // =========================================================
+    // CHART BAR
+    // =========================================================
+
+    private Region chartBar(
+            double height) {
+
+        Region bar = new Region();
+
+        bar.setPrefWidth(
+            32
+        );
+
+        bar.setPrefHeight(
+            height
+        );
+
+        bar.setStyle(
+            "-fx-background-color: #3264E5;" +
+            "-fx-background-radius: 7 7 0 0;"
+        );
+
+        return bar;
+    }
+
+    // =========================================================
+    // CHART LABEL
+    // =========================================================
+
+    private Label chartLabel(
+            String text) {
+
+        Label label = new Label(
+            text
+        );
+
+        label.setStyle(
+            "-fx-font-size: 10px;" +
+            "-fx-text-fill: #94A3B8;"
+        );
+
+        return label;
+    }
+
+    // =========================================================
+    // ELECTION ROW
+    // =========================================================
+
+    private VBox electionRow(
+            String name,
+            String voters,
+            String status) {
+
+        VBox row = new VBox(5);
+
+        row.setPadding(
+            new Insets(12)
+        );
+
+        row.setStyle(
+            "-fx-background-color: #F8FAFC;" +
+            "-fx-background-radius: 10;"
+        );
+
+        HBox top = new HBox();
+
+        top.setAlignment(
+            Pos.CENTER_LEFT
+        );
+
+        Label electionName = new Label(
+            name
+        );
+
+        electionName.setFont(
+            Font.font(
+                "Arial",
+                FontWeight.BOLD,
+                13
+            )
+        );
+
+        electionName.setStyle(
+            "-fx-text-fill: #172554;"
+        );
+
+        Region spacer = new Region();
+
+        HBox.setHgrow(
+            spacer,
+            Priority.ALWAYS
+        );
+
+        Label statusLabel = new Label(
+            status
+        );
+
+        statusLabel.setStyle(
+            "-fx-font-size: 10px;" +
+            "-fx-font-weight: bold;" +
+            "-fx-text-fill: #3264E5;"
+        );
+
+        top.getChildren().addAll(
+            electionName,
+            spacer,
+            statusLabel
+        );
+
+        Label voterLabel = new Label(
+            voters
+        );
+
+        voterLabel.setStyle(
+            "-fx-font-size: 11px;" +
+            "-fx-text-fill: #64748B;"
+        );
+
+        row.getChildren().addAll(
+            top,
+            voterLabel
+        );
+
+        return row;
+    }
+
+    // =========================================================
+    // ACTION BUTTON
+    // =========================================================
+
+    private Button actionButton(
+            String text) {
+
+        Button button = new Button(
+            text
+        );
+
+        button.setPrefHeight(
+            45
+        );
+
+        button.setPrefWidth(
+            190
+        );
+
+        button.setStyle(
+            "-fx-background-color: white;" +
+            "-fx-text-fill: #172554;" +
+            "-fx-font-size: 13px;" +
+            "-fx-font-weight: bold;" +
+            "-fx-background-radius: 10;" +
+            "-fx-border-color: #E2E8F0;" +
+            "-fx-border-radius: 10;"
+        );
+
+        return button;
     }
 }
