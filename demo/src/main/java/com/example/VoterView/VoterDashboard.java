@@ -39,14 +39,13 @@ public class VoterDashboard extends Application {
     public static Stage VoterDashboardStage;
     public static BorderPane dashboardCenter;
 
-    private static Text sidebarOrgNameText;
-    private static Text sidebarRoleText;
+    private static Text sidebarOrgNameText; 
+    private static Text sidebarRoleText;    
     private static Text homeWelcomeTitleText;
-    private static Text statValue1;
-    private static Text statValue2;
-    private static Text statValue3;
+    private static Text statValue1; // Verified Status
+    private static Text statValue2; // Elections Participated / Active Ballots
+    private static Text statValue3; // Current Membership / Organization Name
 
-    // References for sidebar menu state tracking
     private static Button homeBtnRef;
     private static VBox menuRef;
 
@@ -125,15 +124,15 @@ public class VoterDashboard extends Application {
         StackPane orgAvatar = new StackPane(orgCircle, orgIcon);
         VBox orgText = new VBox(2);
 
-        sidebarOrgNameText = new Text("Alex Morgan");
+        sidebarOrgNameText = new Text("ABC College - Student Union 2026");
         sidebarOrgNameText.setFill(Color.WHITE);
-        sidebarOrgNameText.setFont(Font.font("Arial", FontWeight.BOLD, 13));
+        sidebarOrgNameText.setFont(Font.font("Arial", FontWeight.BOLD, 12.5));
 
-        sidebarRoleText = new Text("Eligible Voter");
+        sidebarRoleText = new Text("Alex Morgan (Eligible Voter)");
         sidebarRoleText.setFill(Color.web("#A9BCD3"));
         sidebarRoleText.setFont(Font.font(10.5));
 
-        orgText.getChildren().addAll(sidebarOrgNameText, sidebarRoleText);
+        orgText.getChildren().addAll(sidebarRoleText, sidebarOrgNameText);
 
         Region orgSpacer = new Region();
         HBox.setHgrow(orgSpacer, Priority.ALWAYS);
@@ -156,7 +155,6 @@ public class VoterDashboard extends Application {
             showPage(createVoterHomeContentStatic());
         });
 
-        // Wired up correctly to load ActiveElection view and update menu highlight
         activeElecBtn.setOnAction(e -> {
             setActiveMenu(menu, activeElecBtn);
             showPage(ActiveElection.createActiveElectionView());
@@ -166,13 +164,59 @@ public class VoterDashboard extends Application {
             setActiveMenu(menu, voteBtn);
             showPage(Vote.createOrganizationSelectionView());
         });
-        
-        // Add this action handler:
-        historyBtn.setOnAction(e -> {
-        setActiveMenu(menu, historyBtn);
-        showPage(VotingHistory.createVotingHistoryView());
+
+        orgBtn.setOnAction(e -> {
+        setActiveMenu(menu, orgBtn);
+        java.util.List<java.util.Map<String, String>> mockOrgList = new java.util.ArrayList<>();
+        showPage(MyOrganization.createMyOrganizationView(mockOrgList));
+        });
+
+        // Inside your VoterDashboard.java or Controller action handler:
+        notifBtn.setOnAction(e -> {
+        setActiveMenu(menu, notifBtn);
+        // Fetch notifications dynamically from your DAO/Controller:
+        // List<Map<String, String>> notifList = notificationDAO.getNotificationsForVoter(voterId);
+        java.util.List<java.util.Map<String, String>> mockNotifList = new java.util.ArrayList<>();
+        // Add mock or DAO records...
+        showPage(Notification.createNotificationView(mockNotifList));
 
         });
+
+
+
+        historyBtn.setOnAction(e -> {
+            setActiveMenu(menu, historyBtn);
+            showPage(VotingHistory.createVotingHistoryView());
+        });
+
+        joinOrgBtn.setOnAction(e -> {
+        setActiveMenu(menu, joinOrgBtn);
+        showPage(JoinOrganization.createJoinOrganizationView());
+        });
+
+        appBtn.setOnAction(e -> {
+            setActiveMenu(menu, appBtn);
+    
+        // Fetch approved applications dynamically from your DAO/Controller:
+        // List<Map<String, String>> approvedApps = applicationDAO.getApprovedApplicationsForVoter(voterId);
+    
+        java.util.List<java.util.Map<String, String>> mockApprovedApps = new java.util.ArrayList<>();
+        // Example record (will only display if approved by admin):
+        /*
+        java.util.Map<String, String> sample = new java.util.HashMap<>();
+        sample.put("orgName", "ABC College - Student Union 2026");
+        sample.put("position", "President Candidate");
+        sample.put("submittedDate", "February 10, 2026");
+        sample.put("approvalDate", "February 14, 2026");
+        sample.put("themeColor", "#7B4DFF");
+        mockApprovedApps.add(sample);
+        */
+    
+        showPage(MyApplication.createMyApplicationView(mockApprovedApps));
+
+        });
+
+
 
 
         menu.getChildren().addAll(homeBtnRef, activeElecBtn, voteBtn, historyBtn, orgBtn, joinOrgBtn, notifBtn, appBtn);
@@ -307,15 +351,16 @@ public class VoterDashboard extends Application {
         subtitle.setFont(Font.font(12.5));
         heading.getChildren().addAll(homeWelcomeTitleText, subtitle);
 
-        statValue1 = new Text("Verified");
-        statValue2 = new Text("4");
-        statValue3 = new Text("ABC College");
+        // Initial stat references
+        if (statValue1 == null) statValue1 = new Text("Verified");
+        if (statValue2 == null) statValue2 = new Text("2");
+        if (statValue3 == null) statValue3 = new Text("ABC College - Student Union 2026");
 
         HBox statsRow = new HBox(15);
         statsRow.getChildren().addAll(
                 createCustomStatCard("Verified Status", statValue1, "ID Confirmed", "#19B66A"),
-                createCustomStatCard("Elections Participated", statValue2, "Lifetime history", "#1464F4"),
-                createCustomStatCard("Current Membership", statValue3, "Student Union", "#7B4DFF")
+                createCustomStatCard("Active Ballots", statValue2, "Pending ballots", "#1464F4"),
+                createCustomStatCard("Current Membership", statValue3, "Active Context", "#7B4DFF")
         );
 
         VBox banner = new VBox(8);
@@ -369,12 +414,26 @@ public class VoterDashboard extends Application {
     }
 
     public static void loadVoterData(String fullName, String role, String verificationStatus, String totalElectionsVoted, String organizationName) {
-        if (sidebarOrgNameText != null) sidebarOrgNameText.setText(fullName);
-        if (sidebarRoleText != null) sidebarRoleText.setText(role);
+        if (sidebarOrgNameText != null) sidebarOrgNameText.setText(organizationName);
+        if (sidebarRoleText != null) sidebarRoleText.setText(fullName + " (" + role + ")");
         if (homeWelcomeTitleText != null) homeWelcomeTitleText.setText("Welcome back, " + fullName + "! 👋");
         if (statValue1 != null) statValue1.setText(verificationStatus);
         if (statValue2 != null) statValue2.setText(totalElectionsVoted);
         if (statValue3 != null) statValue3.setText(organizationName);
+    }
+
+    /**
+     * Updates the active organization in the sidebar header and reflects organization-specific metrics on the home cards.
+     */
+    public static void updateActiveOrganization(String orgName, String status, String activeBallotsCount) {
+        if (sidebarOrgNameText != null) {
+            sidebarOrgNameText.setText(orgName);
+        }
+        if (statValue1 != null) statValue1.setText(status);
+        if (statValue2 != null) statValue2.setText(activeBallotsCount);
+        if (statValue3 != null) statValue3.setText(orgName);
+
+        returnHomeFromVoting();
     }
 
     public static void returnHomeFromVoting() {
@@ -388,9 +447,5 @@ public class VoterDashboard extends Application {
         if (dashboardCenter != null) {
             dashboardCenter.setCenter(page);
         }
-    }
-
-    public static void main(String[] args) {
-        launch(args);
     }
 }
