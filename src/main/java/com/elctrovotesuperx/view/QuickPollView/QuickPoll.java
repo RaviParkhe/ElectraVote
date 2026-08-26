@@ -52,7 +52,7 @@ public class QuickPoll implements Page {
 
         box.getChildren().add(back);
 
-        scene = new Scene(box, 1200, 700);
+        scene = new Scene(box);
         return scene;
     }
 }

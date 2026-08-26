@@ -1,7 +1,7 @@
 package com.elctrovotesuperx.view.LoginPageView;
 
 import com.elctrovotesuperx.view.Page;
-import com.elctrovotesuperx.view.HomePageView.Homepage;
+import com.elctrovotesuperx.view.HomePageView.HomePage;
 
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -23,8 +23,7 @@ public class Login implements Page {
         BorderPane root = new BorderPane();
 
         root.setStyle(
-            "-fx-background-color: #F5F7FB;"
-        );
+                "-fx-background-color: #F5F7FB;");
 
         VBox card = new VBox(16);
 
@@ -33,32 +32,27 @@ public class Login implements Page {
         card.setMaxWidth(430);
 
         card.setStyle(
-            "-fx-background-color: white;" +
-            "-fx-background-radius: 18;" +
-            "-fx-border-color: #E2E8F0;" +
-            "-fx-border-radius: 18;"
-        );
+                "-fx-background-color: white;" +
+                        "-fx-background-radius: 18;" +
+                        "-fx-border-color: #E2E8F0;" +
+                        "-fx-border-radius: 18;");
 
         Label title = new Label("ElectraVote");
 
         title.setFont(
-            Font.font("Arial", 30)
-        );
+                Font.font("Arial", 30));
 
         title.setStyle(
-            "-fx-font-weight: bold;" +
-            "-fx-text-fill: #172554;"
-        );
+                "-fx-font-weight: bold;" +
+                        "-fx-text-fill: #172554;");
 
         Label subtitle = new Label(
-            "Secure Multi-Organization Election Platform"
-        );
+                "Secure Multi-Organization Election Platform");
 
         subtitle.setWrapText(true);
 
         subtitle.setStyle(
-            "-fx-text-fill: #64748B;"
-        );
+                "-fx-text-fill: #64748B;");
 
         TextField username = new TextField();
         username.setPromptText("Username");
@@ -69,10 +63,9 @@ public class Login implements Page {
         ComboBox<String> role = new ComboBox<>();
 
         role.getItems().addAll(
-            "Member / Voter",
-            "Admin",
-            "Candidate"
-        );
+                "Member / Voter",
+                "Admin",
+                "Candidate");
 
         role.setValue("Member / Voter");
         role.setMaxWidth(Double.MAX_VALUE);
@@ -83,17 +76,15 @@ public class Login implements Page {
         loginButton.setMaxWidth(Double.MAX_VALUE);
 
         loginButton.setStyle(
-            "-fx-background-color: #3264E5;" +
-            "-fx-text-fill: white;" +
-            "-fx-font-size: 15px;" +
-            "-fx-background-radius: 10;"
-        );
+                "-fx-background-color: #3264E5;" +
+                        "-fx-text-fill: white;" +
+                        "-fx-font-size: 15px;" +
+                        "-fx-background-radius: 10;");
 
         Label message = new Label();
 
         message.setStyle(
-            "-fx-text-fill: #DC2626;"
-        );
+                "-fx-text-fill: #DC2626;");
 
         // =========================================
         // LOGIN
@@ -101,61 +92,54 @@ public class Login implements Page {
 
         loginButton.setOnAction(e -> {
 
-    if (username.getText().isBlank()
-            || password.getText().isBlank()) {
+            if (username.getText().isBlank()
+                    || password.getText().isBlank()) {
 
-        message.setText(
-            "Enter username and password."
-        );
+                message.setText(
+                        "Enter username and password.");
 
-        return;
-    }
+                return;
+            }
 
-    Homepage homepage = new Homepage(loginStage);
-    loginStage.setScene(
-        homepage.getScene(() -> {
+            HomePage homepage = new HomePage(loginStage);
+            loginStage.setScene(
+                    homepage.getScene(() -> {
 
-            // Homepage -> Logout -> Login
+                        // Homepage -> Logout -> Login
 
-            loginStage.setScene(loginScene);
+                        loginStage.setScene(loginScene);
+                        loginStage.setMaximized(true);
 
-        })
-    );
-});
+                    }));
+            loginStage.setMaximized(true);
+        });
 
         card.getChildren().addAll(
 
-            title,
-            subtitle,
+                title,
+                subtitle,
 
-            new Label("Username"),
-            username,
+                new Label("Username"),
+                username,
 
-            new Label("Password"),
-            password,
+                new Label("Password"),
+                password,
 
-            new Label("Role"),
-            role,
+                new Label("Role"),
+                role,
 
-            loginButton,
-            message
-        );
+                loginButton,
+                message);
 
-        StackPane center =
-                new StackPane(card);
+        StackPane center = new StackPane(card);
 
         center.setPadding(
-            new Insets(30)
-        );
+                new Insets(30));
 
         root.setCenter(center);
 
-        loginScene =
-                new Scene(
-                    root,
-                    1200,
-                    700
-                );
+        loginScene = new Scene(
+                root);
 
         return loginScene;
     }

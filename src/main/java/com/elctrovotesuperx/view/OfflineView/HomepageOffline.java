@@ -1,4 +1,4 @@
-package com.superxui.view;
+package com.elctrovotesuperx.view.OfflineView;
 
 import javafx.application.Application;
 import javafx.geometry.Insets;
@@ -21,10 +21,24 @@ public class HomepageOffline extends Application {
 
         BorderPane borderpane = new BorderPane();
 
-        Image img = new Image("assects\\logo\\new logo.jpeg");
-        ImageView imageview = new ImageView(img);
-        imageview.setFitWidth(195);
-        imageview.setFitHeight(45);
+        HBox hb1 = new HBox();
+        hb1.setPrefWidth(255);
+        hb1.setPrefHeight(64);
+        hb1.setAlignment(Pos.CENTER_LEFT);
+        hb1.setPadding(new Insets(0, 20, 0, 25));
+        hb1.setStyle("-fx-Background-color : #121d35;");
+
+        try {
+            Image img = new Image("assects\\logo\\new logo.jpeg");
+            ImageView imageview = new ImageView(img);
+            imageview.setFitWidth(195);
+            imageview.setFitHeight(45);
+            hb1.getChildren().addAll(imageview);
+        } catch (Exception ignored) {
+            Label logoFallback = new Label("ElectraVote Offline");
+            logoFallback.setStyle("-fx-text-fill: white; -fx-font-weight: bold; -fx-font-size: 16px;");
+            hb1.getChildren().add(logoFallback);
+        }
 
         Text text1 = new Text("General");
         Button Home = new Button("⌂   Home");
@@ -32,14 +46,6 @@ public class HomepageOffline extends Application {
 
         VBox vb11 = new VBox();
         vb11.getChildren().addAll(text1, Home, organizations);
-
-        HBox hb1 = new HBox();
-        hb1.setPrefWidth(255);
-        hb1.setPrefHeight(64);
-        hb1.setAlignment(Pos.CENTER_LEFT);
-        hb1.setPadding(new Insets(0, 20, 0, 25));
-        hb1.setStyle("-fx-Background-color : #121d35;");
-        hb1.getChildren().addAll(imageview);
 
         VBox vb1 = new VBox();
         vb1.getChildren().addAll(vb11);
@@ -56,7 +62,7 @@ public class HomepageOffline extends Application {
                 vb1);
 
         borderpane.setLeft(vbox);
-        Scene sc = new Scene(borderpane, 1200, 700);
+        Scene sc = new Scene(borderpane);
         stage.setScene(sc);
         stage.setMaximized(true);
         stage.setTitle("Member Dashboard");
