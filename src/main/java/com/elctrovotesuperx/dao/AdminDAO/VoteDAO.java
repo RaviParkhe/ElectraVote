@@ -1,5 +1,6 @@
 package com.elctrovotesuperx.dao.AdminDAO;
 
+import com.elctrovotesuperx.exception.FirestoreException;
 import com.elctrovotesuperx.model.AdminModel.VoteRecord;
 import com.google.gson.*;
 
@@ -25,7 +26,7 @@ public class VoteDAO {
     // =========================================================
 
     public static boolean castVote(VoteRecord vote, String idToken)
-            throws IOException, InterruptedException {
+            throws FirestoreException {
 
         String url = BASE_URL + "/" + encode(vote.getId())
                 + "?updateMask.fieldPaths=electionId"
@@ -55,7 +56,12 @@ public class VoteDAO {
                 .method("PATCH", HttpRequest.BodyPublishers.ofString(body.toString(), StandardCharsets.UTF_8))
                 .build();
 
-        HttpResponse<String> res = CLIENT.send(req, HttpResponse.BodyHandlers.ofString());
+        HttpResponse<String> res;
+        try {
+            res = CLIENT.send(req, HttpResponse.BodyHandlers.ofString());
+        } catch (IOException | InterruptedException e) {
+            throw new FirestoreException("Unable to cast vote.", e);
+        }
         System.out.println("[VoteDAO.castVote] " + res.statusCode());
         return res.statusCode() >= 200 && res.statusCode() < 300;
     }
@@ -66,7 +72,7 @@ public class VoteDAO {
 
     public static boolean hasVoted(String electionId, String voterUid,
                                    String position, String idToken)
-            throws IOException, InterruptedException {
+            throws FirestoreException {
 
         String queryUrl = "https://firestore.googleapis.com/v1/projects/electravote-ca872/databases/(default)/documents:runQuery";
 
@@ -94,7 +100,12 @@ public class VoteDAO {
                 .POST(HttpRequest.BodyPublishers.ofString(queryBody, StandardCharsets.UTF_8))
                 .build();
 
-        HttpResponse<String> res = CLIENT.send(req, HttpResponse.BodyHandlers.ofString());
+        HttpResponse<String> res;
+        try {
+            res = CLIENT.send(req, HttpResponse.BodyHandlers.ofString());
+        } catch (IOException | InterruptedException e) {
+            throw new FirestoreException("Unable to check vote status.", e);
+        }
         if (res.statusCode() < 200 || res.statusCode() >= 300) return false;
 
         JsonArray docs = JsonParser.parseString(res.body()).getAsJsonArray();
@@ -108,7 +119,7 @@ public class VoteDAO {
 
     public static Map<String, Map<String, Integer>> getResults(
             String electionId, String idToken)
-            throws IOException, InterruptedException {
+            throws FirestoreException {
 
         String queryUrl = "https://firestore.googleapis.com/v1/projects/electravote-ca872/databases/(default)/documents:runQuery";
 
@@ -132,7 +143,12 @@ public class VoteDAO {
                 .POST(HttpRequest.BodyPublishers.ofString(queryBody, StandardCharsets.UTF_8))
                 .build();
 
-        HttpResponse<String> res = CLIENT.send(req, HttpResponse.BodyHandlers.ofString());
+        HttpResponse<String> res;
+        try {
+            res = CLIENT.send(req, HttpResponse.BodyHandlers.ofString());
+        } catch (IOException | InterruptedException e) {
+            throw new FirestoreException("Unable to retrieve vote results.", e);
+        }
 
         Map<String, Map<String, Integer>> results = new LinkedHashMap<>();
         if (res.statusCode() < 200 || res.statusCode() >= 300) return results;
@@ -153,6 +169,72 @@ public class VoteDAO {
         }
         return results;
     }
+
+    // =========================================================
+    // GET VOTES BY VOTER
+    // =========================================================
+
+    public static List<VoteRecord> getVotesByVoter(String voterUid, String idToken)
+            throws FirestoreException {
+
+        String queryUrl = "https://firestore.googleapis.com/v1/projects/electravote-ca872/databases/(default)/documents:runQuery";
+
+        String queryBody = "{"
+                + "\"structuredQuery\": {"
+                + "  \"from\": [{\"collectionId\": \"Votes\"}],"
+                + "  \"where\": {"
+                + "    \"fieldFilter\": {"
+                + "      \"field\": {\"fieldPath\": \"voterUid\"},"
+                + "      \"op\": \"EQUAL\","
+                + "      \"value\": {\"stringValue\": \"" + voterUid + "\"}"
+                + "    }"
+                + "  }"
+                + "}"
+                + "}";
+
+        HttpRequest req = HttpRequest.newBuilder()
+                .uri(URI.create(queryUrl))
+                .header("Authorization", "Bearer " + idToken)
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(queryBody, StandardCharsets.UTF_8))
+                .build();
+
+        HttpResponse<String> res;
+        try {
+            res = CLIENT.send(req, HttpResponse.BodyHandlers.ofString());
+        } catch (IOException | InterruptedException e) {
+            throw new FirestoreException("Unable to retrieve voter history.", e);
+        }
+
+        List<VoteRecord> list = new ArrayList<>();
+        if (res.statusCode() < 200 || res.statusCode() >= 300) return list;
+
+        JsonArray docs = JsonParser.parseString(res.body()).getAsJsonArray();
+        for (JsonElement el : docs) {
+            JsonObject obj = el.getAsJsonObject();
+            if (!obj.has("document")) continue;
+            JsonObject doc = obj.getAsJsonObject("document");
+            if (!doc.has("fields")) continue;
+            JsonObject fields = doc.getAsJsonObject("fields");
+
+            String docName = doc.get("name").getAsString();
+            String id = docName.substring(docName.lastIndexOf('/') + 1);
+            String electionId = strField(fields, "electionId");
+            String vUid = strField(fields, "voterUid");
+            String position = strField(fields, "position");
+            String candidateId = strField(fields, "candidateId");
+            String candidateName = strField(fields, "candidateName");
+            String joinCode = strField(fields, "joinCode");
+            long votedAt = 0;
+            if (fields.has("votedAt") && fields.getAsJsonObject("votedAt").has("integerValue")) {
+                votedAt = fields.getAsJsonObject("votedAt").get("integerValue").getAsLong();
+            }
+
+            list.add(new VoteRecord(id, electionId, vUid, position, candidateId, candidateName, joinCode, votedAt));
+        }
+        return list;
+    }
+
 
     // =========================================================
     // HELPERS

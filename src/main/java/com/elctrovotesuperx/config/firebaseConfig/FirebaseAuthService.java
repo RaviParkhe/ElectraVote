@@ -1,6 +1,7 @@
 package com.elctrovotesuperx.config.firebaseConfig;
 
 
+import com.elctrovotesuperx.exception.AuthenticationException;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
@@ -22,7 +23,7 @@ public class FirebaseAuthService {
 
     public static AuthResult createUser(
             String email,
-            String password) throws IOException, InterruptedException {
+            String password) throws AuthenticationException {
 
         String url =
                 "https://identitytoolkit.googleapis.com/v1/accounts:signUp?key="
@@ -50,11 +51,16 @@ public class FirebaseAuthService {
                         )
                         .build();
 
-        HttpResponse<String> response =
-                CLIENT.send(
-                        request,
-                        HttpResponse.BodyHandlers.ofString()
-                );
+        HttpResponse<String> response;
+        try {
+            response = CLIENT.send(
+                    request,
+                    HttpResponse.BodyHandlers.ofString()
+            );
+        } catch (IOException | InterruptedException e) {
+            throw new AuthenticationException(
+                    "Unable to create user account.", e);
+        }
 
         return parseResponse(response);
     }
@@ -65,7 +71,7 @@ public class FirebaseAuthService {
 
     public static AuthResult signIn(
             String email,
-            String password) throws IOException, InterruptedException {
+            String password) throws AuthenticationException {
 
         String url =
                 "https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key="
@@ -93,11 +99,16 @@ public class FirebaseAuthService {
                         )
                         .build();
 
-        HttpResponse<String> response =
-                CLIENT.send(
-                        request,
-                        HttpResponse.BodyHandlers.ofString()
-                );
+        HttpResponse<String> response;
+        try {
+            response = CLIENT.send(
+                    request,
+                    HttpResponse.BodyHandlers.ofString()
+            );
+        } catch (IOException | InterruptedException e) {
+            throw new AuthenticationException(
+                    "Unable to sign in.", e);
+        }
 
         return parseResponse(response);
     }

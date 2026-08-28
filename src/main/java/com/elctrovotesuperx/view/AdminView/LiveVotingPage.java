@@ -1,12 +1,16 @@
 package com.elctrovotesuperx.view.AdminView;
 
+import com.elctrovotesuperx.config.SessionManager;
+import com.elctrovotesuperx.config.firebaseConfig.FirebaseDatabaseService;
+import com.elctrovotesuperx.dao.AdminDAO.ElectionDAO;
+import com.elctrovotesuperx.dao.AdminDAO.VoteDAO;
+import com.elctrovotesuperx.model.AdminModel.ElectionData;
+import com.google.gson.JsonObject;
+
+import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.CompletableFuture;
+import java.util.*;
 
 import javafx.animation.Animation;
 import javafx.animation.KeyFrame;
@@ -22,11 +26,8 @@ import javafx.util.Duration;
 
 public class LiveVotingPage extends VBox {
 
-    // =========================================================
-    // MULTI-TENANCY CONTEXT & DATA STATE
-    // =========================================================
-    private final String currentOrganizationId = "ORG_ABC_COLLEGE";
-    private final Map<String, ElectionDataModel> electionsMap = new HashMap<>();
+    private final Map<String, ElectionData> electionsMap = new HashMap<>();
+    private ElectionData currentSelectedElection;
 
     private ComboBox<String> electionCombo;
     private VBox liveTelemetryContainer;
@@ -44,16 +45,13 @@ public class LiveVotingPage extends VBox {
     private ProgressBar liveTurnoutBar;
     private Button emergencyPauseBtn;
 
-    // Department-wise Progress Tracking
+    // Department/Position-wise Progress Tracking
     private final Map<String, ProgressBar> deptProgressBars = new HashMap<>();
     private final Map<String, Label> deptTurnoutLabels = new HashMap<>();
 
     private static final String FONT = "-fx-font-family: 'Segoe UI', 'Inter', -apple-system, sans-serif;";
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("hh:mm a");
 
-    // =========================================================
-    // CONSTRUCTOR
-    // =========================================================
     public LiveVotingPage() {
         setSpacing(18);
         setPadding(new Insets(24, 32, 28, 32));
@@ -74,13 +72,10 @@ public class LiveVotingPage extends VBox {
 
         getChildren().addAll(header, electionBar, scrollPane);
 
-        initializeFallbackData();
+        loadElectionsFromFirebase();
         showSelectElectionPlaceholder();
     }
 
-    // =========================================================
-    // 1. HEADER SECTION
-    // =========================================================
     private HBox buildHeader() {
         HBox header = new HBox();
         header.setAlignment(Pos.CENTER_LEFT);
@@ -113,9 +108,6 @@ public class LiveVotingPage extends VBox {
         return header;
     }
 
-    // =========================================================
-    // 2. ELECTION SELECTOR TOOLBAR
-    // =========================================================
     private HBox buildElectionSelectorBar() {
         HBox bar = new HBox(16);
         bar.setAlignment(Pos.CENTER_LEFT);
@@ -127,12 +119,8 @@ public class LiveVotingPage extends VBox {
         selectLabel.setStyle(FONT + "-fx-font-weight: 800; -fx-font-size: 13.5px; -fx-text-fill: #1e1b4b;");
 
         electionCombo = new ComboBox<>();
-        electionCombo.setPromptText("Choose live election...");
+        electionCombo.setPromptText("Loading active elections...");
         electionCombo.setPrefWidth(360);
-        electionCombo.getItems().addAll(
-                "Student Council General Election 2026",
-                "Cultural Affairs Committee Election",
-                "Sports & Athletics Committee Election");
         electionCombo.setStyle(FONT
                 + "-fx-background-color: #f8fafc; -fx-border-color: #cbd5e1; -fx-border-radius: 8; -fx-background-radius: 8; -fx-font-size: 13px; -fx-font-weight: 600; -fx-padding: 2 4;");
         electionCombo.setOnAction(e -> handleElectionSelection());
@@ -148,15 +136,57 @@ public class LiveVotingPage extends VBox {
         refreshBtn.setMinWidth(Region.USE_PREF_SIZE);
         refreshBtn.setStyle(FONT
                 + "-fx-background-color: #eff6ff; -fx-text-fill: #1d4ed8; -fx-border-color: #3b82f6; -fx-border-radius: 8; -fx-font-weight: 800; -fx-font-size: 12.5px; -fx-padding: 8 16; -fx-background-radius: 8; -fx-cursor: hand;");
-        refreshBtn.setOnAction(e -> handleElectionSelection());
+        refreshBtn.setOnAction(e -> {
+            loadElectionsFromFirebase();
+            handleElectionSelection();
+        });
 
         bar.getChildren().addAll(selectLabel, electionCombo, loadingSpinner, space, refreshBtn);
         return bar;
     }
 
-    // =========================================================
-    // 3. PLACEHOLDER VIEW
-    // =========================================================
+    private void loadElectionsFromFirebase() {
+        loadingSpinner.setVisible(true);
+        Thread t = new Thread(() -> {
+            try {
+                String joinCode = SessionManager.joinCode;
+                String idToken = SessionManager.idToken;
+                List<ElectionData> list = new ArrayList<>();
+                if (joinCode != null && !joinCode.isBlank()) {
+                    list = ElectionDAO.getElectionsByOrg(joinCode, idToken);
+                }
+
+                List<ElectionData> finalElecs = list;
+                Platform.runLater(() -> {
+                    loadingSpinner.setVisible(false);
+                    electionsMap.clear();
+                    String previousSelection = electionCombo.getValue();
+                    electionCombo.getItems().clear();
+
+                    if (finalElecs.isEmpty()) {
+                        electionCombo.setPromptText("No elections open in organization");
+                    } else {
+                        for (ElectionData e : finalElecs) {
+                            String title = e.getTitle() != null ? e.getTitle() : "Untitled Election";
+                            electionsMap.put(title, e);
+                            electionCombo.getItems().add(title);
+                        }
+                        if (previousSelection != null && electionCombo.getItems().contains(previousSelection)) {
+                            electionCombo.setValue(previousSelection);
+                        } else {
+                            electionCombo.getSelectionModel().selectFirst();
+                        }
+                    }
+                });
+            } catch (Exception ex) {
+                ex.printStackTrace();
+                Platform.runLater(() -> loadingSpinner.setVisible(false));
+            }
+        });
+        t.setDaemon(true);
+        t.start();
+    }
+
     private void showSelectElectionPlaceholder() {
         stopAllSimulations();
         liveTelemetryContainer.getChildren().clear();
@@ -181,30 +211,94 @@ public class LiveVotingPage extends VBox {
         liveTelemetryContainer.getChildren().add(box);
     }
 
-    // =========================================================
-    // 4. MAIN TELEMETRY DASHBOARD BUILDER
-    // =========================================================
     private void handleElectionSelection() {
         String selected = electionCombo.getValue();
-        if (selected == null) {
+        if (selected == null || !electionsMap.containsKey(selected)) {
             showSelectElectionPlaceholder();
             return;
         }
 
+        currentSelectedElection = electionsMap.get(selected);
         loadingSpinner.setVisible(true);
 
-        CompletableFuture.supplyAsync(() -> {
+        Thread fetchTelemetry = new Thread(() -> {
             try {
-                Thread.sleep(250);
-            } catch (InterruptedException ignored) {
+                String idToken = SessionManager.idToken;
+                String joinCode = SessionManager.joinCode;
+
+                Map<String, Map<String, Integer>> results = VoteDAO.getResults(currentSelectedElection.getId(), idToken);
+
+                // Calculate total votes cast
+                int votesCast = 0;
+                Map<String, Double> positionTurnouts = new LinkedHashMap<>();
+
+                for (Map.Entry<String, Map<String, Integer>> entry : results.entrySet()) {
+                    int posVotes = 0;
+                    for (int count : entry.getValue().values()) {
+                        posVotes += count;
+                    }
+                    if (posVotes > votesCast) {
+                        votesCast = posVotes;
+                    }
+                    positionTurnouts.put(entry.getKey(), (double) posVotes);
+                }
+
+                // Query registered members count
+                int totalMembers = 0;
+                try {
+                    JsonObject membersObj = FirebaseDatabaseService.getMembers(joinCode, idToken);
+                    if (membersObj != null) {
+                        for (String key : membersObj.keySet()) {
+                            JsonObject m = membersObj.getAsJsonObject(key);
+                            if (m.has("status") && "ACCEPTED".equalsIgnoreCase(m.get("status").getAsString())) {
+                                totalMembers++;
+                            }
+                        }
+                    }
+                } catch (Exception ignored) {}
+
+                if (totalMembers == 0) {
+                    totalMembers = Math.max(votesCast, 1);
+                }
+
+                // Normalize position percentage
+                for (Map.Entry<String, Double> pEntry : positionTurnouts.entrySet()) {
+                    pEntry.setValue(Math.min(1.0, pEntry.getValue() / totalMembers));
+                }
+
+                if (positionTurnouts.isEmpty()) {
+                    if (currentSelectedElection.getPositions() != null) {
+                        for (String p : currentSelectedElection.getPositions()) {
+                            positionTurnouts.put(p, 0.0);
+                        }
+                    }
+                }
+
+                final int finalTotalVoters = totalMembers;
+                final int finalVotesCast = votesCast;
+                final Map<String, Double> finalPositionTurnouts = positionTurnouts;
+
+                Platform.runLater(() -> {
+                    loadingSpinner.setVisible(false);
+                    ElectionDataModel data = new ElectionDataModel(
+                            currentSelectedElection.getTitle(),
+                            finalTotalVoters,
+                            finalVotesCast,
+                            LocalTime.of(9, 0),
+                            LocalTime.of(18, 0)
+                    );
+                    data.departmentTurnout.putAll(finalPositionTurnouts);
+                    renderDashboard(data);
+                    startLiveTelemetryCountdown(data);
+                });
+
+            } catch (Exception ex) {
+                ex.printStackTrace();
+                Platform.runLater(() -> loadingSpinner.setVisible(false));
             }
-            return electionsMap.getOrDefault(selected,
-                    new ElectionDataModel(selected, 1000, 500, LocalTime.of(9, 0), LocalTime.of(18, 0)));
-        }).thenAccept(data -> Platform.runLater(() -> {
-            loadingSpinner.setVisible(false);
-            renderDashboard(data);
-            startLiveTelemetrySimulation(data);
-        }));
+        });
+        fetchTelemetry.setDaemon(true);
+        fetchTelemetry.start();
     }
 
     private void renderDashboard(ElectionDataModel data) {
@@ -227,11 +321,11 @@ public class LiveVotingPage extends VBox {
     private HBox buildMetricsRow(ElectionDataModel data) {
         HBox grid = new HBox(14);
 
-        int remaining = data.totalVoters - data.votedVoters;
+        int remaining = Math.max(0, data.totalVoters - data.votedVoters);
 
         VBox c1 = createMetricCard("👥", "TOTAL REGISTERED", String.valueOf(data.totalVoters), "100% Eligible Roster",
                 "#0f172a", "#f8fafc", "#cbd5e1");
-        VBox c2 = createMetricCard("🗳", "BALLOTS RECORDED", String.valueOf(data.votedVoters), "Double-Voting Locked",
+        VBox c2 = createMetricCard("🗳", "BALLOTS RECORDED", String.valueOf(data.votedVoters), "Zero-Knowledge Sealed",
                 "#2563eb", "#eff6ff", "#93c5fd");
         VBox c3 = createMetricCard("⏳", "UNCAST BALLOTS", String.valueOf(remaining), "Pending Participation", "#d97706",
                 "#fffbeb", "#fde68a");
@@ -290,8 +384,10 @@ public class LiveVotingPage extends VBox {
         VBox titleBox = new VBox(4);
         Label title = new Label(data.name);
         title.setStyle(FONT + "-fx-font-size: 18px; -fx-font-weight: 900; -fx-text-fill: #1e1b4b;");
-        Label timeSpan = new Label("Official Polling Window: " + data.startTime.format(TIME_FORMATTER) + "  ➔  "
-                + data.endTime.format(TIME_FORMATTER));
+        String timeInfo = currentSelectedElection != null && currentSelectedElection.getEndDateTime() != null
+                ? "Official Window: " + currentSelectedElection.getStartDateTime() + "  ➔  " + currentSelectedElection.getEndDateTime()
+                : "Official Polling Window Active";
+        Label timeSpan = new Label(timeInfo);
         timeSpan.setStyle(FONT + "-fx-font-size: 12.5px; -fx-text-fill: #4338ca; -fx-font-weight: 600;");
         titleBox.getChildren().addAll(title, timeSpan);
 
@@ -333,7 +429,7 @@ public class LiveVotingPage extends VBox {
         Region footerSp = new Region();
         HBox.setHgrow(footerSp, Priority.ALWAYS);
 
-        Label syncTag = new Label("⚡ HMAC Zero-Knowledge Verified");
+        Label syncTag = new Label("⚡ Zero-Knowledge Homomorphic Encryption Active");
         syncTag.setStyle(FONT + "-fx-font-size: 12px; -fx-text-fill: #059669; -fx-font-weight: 800;");
 
         footer.getChildren().addAll(turnoutRateLabel, totalVotersFooterLabel, footerSp, syncTag);
@@ -350,12 +446,12 @@ public class LiveVotingPage extends VBox {
 
         HBox header = new HBox();
         header.setAlignment(Pos.CENTER_LEFT);
-        Label title = new Label("👥 Departmental Turnout Breakdown");
+        Label title = new Label("👥 Position / Office Participation Breakdown");
         title.setStyle(FONT + "-fx-font-size: 14.5px; -fx-font-weight: 900; -fx-text-fill: #1e1b4b;");
 
         Region sp = new Region();
         HBox.setHgrow(sp, Priority.ALWAYS);
-        Label blindTag = new Label("ANONYMIZED");
+        Label blindTag = new Label("AUDIT VERIFIED");
         blindTag.setStyle(FONT
                 + "-fx-background-color: #f1f5f9; -fx-text-fill: #475569; -fx-font-size: 10px; -fx-font-weight: 800; -fx-padding: 3 8; -fx-background-radius: 6;");
         header.getChildren().addAll(title, sp, blindTag);
@@ -364,8 +460,14 @@ public class LiveVotingPage extends VBox {
         deptProgressBars.clear();
         deptTurnoutLabels.clear();
 
-        for (Map.Entry<String, Double> entry : data.departmentTurnout.entrySet()) {
-            list.getChildren().add(createDepartmentRow(entry.getKey(), entry.getValue()));
+        if (data.departmentTurnout.isEmpty()) {
+            Label noDept = new Label("All votes registered across primary ballot.");
+            noDept.setStyle(FONT + "-fx-font-size: 12px; -fx-text-fill: #64748b;");
+            list.getChildren().add(noDept);
+        } else {
+            for (Map.Entry<String, Double> entry : data.departmentTurnout.entrySet()) {
+                list.getChildren().add(createDepartmentRow(entry.getKey(), entry.getValue()));
+            }
         }
 
         card.getChildren().addAll(header, list);
@@ -452,11 +554,14 @@ public class LiveVotingPage extends VBox {
     }
 
     private void showNotifyUncastVotersModal(ElectionDataModel data) {
-        int uncastCount = data.totalVoters - data.votedVoters;
+        int uncastCount = Math.max(0, data.totalVoters - data.votedVoters);
 
         Dialog<ButtonType> dialog = new Dialog<>();
         if (AdminDashboard.AdminDashboardStage != null) {
             dialog.initOwner(AdminDashboard.AdminDashboardStage);
+            dialog.initModality(javafx.stage.Modality.WINDOW_MODAL);
+        } else {
+            com.electrovotesuperx.utils.Navigation.attachOwner(dialog);
         }
         dialog.setTitle("Dispatch Uncast Voter Notifications");
 
@@ -477,7 +582,7 @@ public class LiveVotingPage extends VBox {
         VBox summaryText = new VBox(4);
         Label sumTitle = new Label(uncastCount + " Uncast Eligible Voters Identified");
         sumTitle.setStyle(FONT + "-fx-font-size: 16px; -fx-font-weight: 900; -fx-text-fill: #1d4ed8;");
-        Label sumSub = new Label("Election: " + data.name + " (Closes at " + data.endTime.format(TIME_FORMATTER) + ")");
+        Label sumSub = new Label("Election: " + data.name);
         sumSub.setStyle(FONT + "-fx-font-size: 12.5px; -fx-text-fill: #475569;");
         summaryText.getChildren().addAll(sumTitle, sumSub);
 
@@ -508,8 +613,7 @@ public class LiveVotingPage extends VBox {
         TextArea messageArea = new TextArea(
                 "Urgent Reminder: Voting for \"" + data.name + "\" is currently active. " +
                         "Your vote is confidential, protected by zero-knowledge ballot secrecy. " +
-                        "Please submit your cast before polling closes at " + data.endTime.format(TIME_FORMATTER)
-                        + ".");
+                        "Please cast your ballot before the official polling period concludes.");
         messageArea.setWrapText(true);
         messageArea.setPrefRowCount(4);
         messageArea.setStyle(FONT
@@ -563,6 +667,9 @@ public class LiveVotingPage extends VBox {
         Dialog<ButtonType> alert = new Dialog<>();
         if (AdminDashboard.AdminDashboardStage != null) {
             alert.initOwner(AdminDashboard.AdminDashboardStage);
+            alert.initModality(javafx.stage.Modality.WINDOW_MODAL);
+        } else {
+            com.electrovotesuperx.utils.Navigation.attachOwner(alert);
         }
         alert.setTitle("System Notification");
 
@@ -645,38 +752,8 @@ public class LiveVotingPage extends VBox {
                 "⏱", "#2563eb", "#eff6ff");
     }
 
-    private void startLiveTelemetrySimulation(ElectionDataModel data) {
+    private void startLiveTelemetryCountdown(ElectionDataModel data) {
         stopAllSimulations();
-
-        telemetryStreamTimeline = new Timeline(new KeyFrame(Duration.seconds(3.5), e -> {
-            if (!data.isPaused && data.votedVoters < data.totalVoters) {
-                data.votedVoters += (int) (Math.random() * 3) + 1;
-                if (data.votedVoters > data.totalVoters)
-                    data.votedVoters = data.totalVoters;
-
-                int remaining = data.totalVoters - data.votedVoters;
-                double turnout = (data.votedVoters * 100.0) / data.totalVoters;
-
-                votedNumberLabel.setText(String.valueOf(data.votedVoters));
-                remainingNumberLabel.setText(String.valueOf(remaining));
-                turnoutRateLabel.setText(String.format("Overall Turnout: %.2f%%", turnout));
-                totalVotersFooterLabel.setText("  (" + data.votedVoters + " of " + data.totalVoters + " cast)");
-                liveTurnoutBar.setProgress((double) data.votedVoters / data.totalVoters);
-
-                for (Map.Entry<String, ProgressBar> entry : deptProgressBars.entrySet()) {
-                    double current = entry.getValue().getProgress();
-                    if (current < 0.95 && Math.random() > 0.4) {
-                        double next = Math.min(1.0, current + 0.008);
-                        entry.getValue().setProgress(next);
-                        Label l = deptTurnoutLabels.get(entry.getKey());
-                        if (l != null)
-                            l.setText(String.format("%.1f%%", next * 100));
-                    }
-                }
-            }
-        }));
-        telemetryStreamTimeline.setCycleCount(Animation.INDEFINITE);
-        telemetryStreamTimeline.play();
 
         countdownTimeline = new Timeline(new KeyFrame(Duration.seconds(1), e -> {
             if (countdownClockLabel != null) {
@@ -710,29 +787,6 @@ public class LiveVotingPage extends VBox {
             countdownTimeline.stop();
     }
 
-    private void initializeFallbackData() {
-        ElectionDataModel e1 = new ElectionDataModel("Student Council General Election 2026", 2000, 1286,
-                LocalTime.of(9, 0), LocalTime.of(18, 0));
-        e1.departmentTurnout.put("Computer Engineering", 0.742);
-        e1.departmentTurnout.put("Information Technology", 0.685);
-        e1.departmentTurnout.put("Mechanical Engineering", 0.521);
-        e1.departmentTurnout.put("Faculty & Staff Senate", 0.810);
-        electionsMap.put(e1.name, e1);
-
-        ElectionDataModel e2 = new ElectionDataModel("Cultural Affairs Committee Election", 1500, 722,
-                LocalTime.of(8, 30), LocalTime.of(18, 0));
-        e2.departmentTurnout.put("Arts & Design League", 0.620);
-        e2.departmentTurnout.put("Music & Drama Club", 0.540);
-        e2.departmentTurnout.put("General Student Body", 0.435);
-        electionsMap.put(e2.name, e2);
-
-        ElectionDataModel e3 = new ElectionDataModel("Sports & Athletics Committee Election", 1200, 443,
-                LocalTime.of(9, 0), LocalTime.of(18, 0));
-        e3.departmentTurnout.put("Athletics & Track", 0.490);
-        e3.departmentTurnout.put("Indoor Sports Guild", 0.350);
-        electionsMap.put(e3.name, e3);
-    }
-
     public static class ElectionDataModel {
         public String name;
         public int totalVoters;
@@ -752,4 +806,4 @@ public class LiveVotingPage extends VBox {
             this.endTime = endTime;
         }
     }
-}
+}

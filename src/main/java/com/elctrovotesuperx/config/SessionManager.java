@@ -1,13 +1,14 @@
 package com.elctrovotesuperx.config;
 
 /**
- * SessionManager holds the currently logged-in admin's session data.
- * Set once after a successful admin sign-in (SignInOrganization).
- * Read by ElectionController, CandidateController, VoteController, etc.
+ * SessionManager holds the currently logged-in admin's and voter's session
+ * data.
+ * Read by ElectionController, CandidateController, VoteController,
+ * VoterDashboard, etc.
  */
 public class SessionManager {
 
-    // Admin Authentication token (Firebase idToken)
+    // Authentication token (Firebase idToken)
     public static String idToken;
 
     // Organization join code (e.g. "EV-XXXX-XXXX")
@@ -16,11 +17,17 @@ public class SessionManager {
     // Organization display name
     public static String organizationName;
 
-    // Admin Firebase UID
+    // Admin Firebase UID, Email & Name
     public static String adminUid;
-
-    // Admin email
     public static String adminEmail;
+    public static String adminName;
+
+    // Voter Session Data
+    public static String voterUid;
+    public static String voterEmail;
+    public static String voterName;
+    public static String voterStatus;
+    public static String voterPhone;
 
     /** Clear session on logout */
     public static void clear() {
@@ -29,9 +36,19 @@ public class SessionManager {
         organizationName = null;
         adminUid = null;
         adminEmail = null;
+        adminName = null;
+        voterUid = null;
+        voterEmail = null;
+        voterName = null;
+        voterStatus = null;
+        voterPhone = null;
     }
 
-    /** Returns true if an admin session is active */
+    public static void clearSession() {
+        clear();
+    }
+
+    /** Returns true if an active authenticated session exists */
     public static boolean isLoggedIn() {
         return idToken != null && !idToken.isBlank();
     }

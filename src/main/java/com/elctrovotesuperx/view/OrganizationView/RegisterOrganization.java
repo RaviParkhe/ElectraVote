@@ -814,6 +814,7 @@ public class RegisterOrganization implements Page {
                            String message){
 
         Alert alert = new Alert(type);
+        com.electrovotesuperx.utils.Navigation.attachOwner(alert);
 
         alert.setTitle(title);
         alert.setHeaderText(null);

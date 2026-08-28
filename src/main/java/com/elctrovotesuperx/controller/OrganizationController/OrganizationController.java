@@ -2,6 +2,8 @@ package com.elctrovotesuperx.controller.OrganizationController;
 
 
 import com.elctrovotesuperx.dao.OrganizationDAO.OrganizationDAO;
+import com.elctrovotesuperx.exception.AuthenticationException;
+import com.elctrovotesuperx.exception.FirestoreException;
 import com.elctrovotesuperx.model.OrganizationModel.Organization;
 import com.elctrovotesuperx.config.firebaseConfig.FirebaseAuthService;
 
@@ -15,7 +17,8 @@ public class OrganizationController {
 
     public FirebaseAuthService.AuthResult register(
             Organization organization,
-            String confirmPassword) throws Exception {
+            String confirmPassword)
+            throws AuthenticationException, FirestoreException, Exception {
 
         if (organization.getAdminName().isBlank()
                 || organization.getOrganizationName().isBlank()

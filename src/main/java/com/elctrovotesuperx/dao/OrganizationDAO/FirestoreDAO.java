@@ -1,5 +1,6 @@
 package com.elctrovotesuperx.dao.OrganizationDAO;
 
+import com.elctrovotesuperx.exception.FirestoreException;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
@@ -23,7 +24,7 @@ public class FirestoreDAO {
             String adminName,
             String adminEmail,
             String adminUid,
-            String idToken) throws IOException, InterruptedException {
+            String idToken) throws FirestoreException {
 
         String url = "https://firestore.googleapis.com/v1/projects/"
                 + PROJECT_ID
@@ -49,8 +50,12 @@ public class FirestoreDAO {
                                 StandardCharsets.UTF_8))
                 .build();
 
-        HttpResponse<String> response =
-                CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+        HttpResponse<String> response;
+        try {
+            response = CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+        } catch (IOException | InterruptedException e) {
+            throw new FirestoreException("Unable to save organization.", e);
+        }
 
         return response.statusCode() == 200;
     }
@@ -65,7 +70,7 @@ public class FirestoreDAO {
             String email,
             String role,
             String joinCode,
-            String idToken) throws IOException, InterruptedException {
+            String idToken) throws FirestoreException {
 
         String url = "https://firestore.googleapis.com/v1/projects/"
                 + PROJECT_ID
@@ -91,8 +96,12 @@ public class FirestoreDAO {
                                 StandardCharsets.UTF_8))
                 .build();
 
-        HttpResponse<String> response =
-                CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+        HttpResponse<String> response;
+        try {
+            response = CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+        } catch (IOException | InterruptedException e) {
+            throw new FirestoreException("Unable to save user.", e);
+        }
 
         return response.statusCode() == 200;
     }
@@ -103,7 +112,7 @@ public class FirestoreDAO {
 
     public static JsonObject getOrganization(
             String joinCode,
-            String idToken) throws IOException, InterruptedException {
+            String idToken) throws FirestoreException {
 
         String url = "https://firestore.googleapis.com/v1/projects/"
                 + PROJECT_ID
@@ -116,8 +125,12 @@ public class FirestoreDAO {
                 .GET()
                 .build();
 
-        HttpResponse<String> response =
-                CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+        HttpResponse<String> response;
+        try {
+            response = CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+        } catch (IOException | InterruptedException e) {
+            throw new FirestoreException("Unable to retrieve organization.", e);
+        }
 
         if (response.statusCode() != 200) {
             return null;
@@ -134,7 +147,7 @@ public class FirestoreDAO {
 
     public static JsonObject getUser(
             String uid,
-            String idToken) throws IOException, InterruptedException {
+            String idToken) throws FirestoreException {
 
         String url = "https://firestore.googleapis.com/v1/projects/"
                 + PROJECT_ID
@@ -147,8 +160,12 @@ public class FirestoreDAO {
                 .GET()
                 .build();
 
-        HttpResponse<String> response =
-                CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+        HttpResponse<String> response;
+        try {
+            response = CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+        } catch (IOException | InterruptedException e) {
+            throw new FirestoreException("Unable to retrieve user.", e);
+        }
 
         if (response.statusCode() != 200) {
             return null;

@@ -1,5 +1,6 @@
 package com.elctrovotesuperx.dao.AdminDAO;
 
+import com.elctrovotesuperx.exception.FirestoreException;
 import com.elctrovotesuperx.model.AdminModel.Candidate;
 import com.google.gson.*;
 
@@ -25,12 +26,15 @@ public class CandidateDAO {
     // =========================================================
 
     public static boolean saveCandidate(Candidate candidate, String idToken)
-            throws IOException, InterruptedException {
+            throws FirestoreException {
 
         String url = BASE_URL + "/" + encode(candidate.getId())
                 + "?updateMask.fieldPaths=electionId"
+                + "&updateMask.fieldPaths=electionTitle"
                 + "&updateMask.fieldPaths=position"
                 + "&updateMask.fieldPaths=name"
+                + "&updateMask.fieldPaths=email"
+                + "&updateMask.fieldPaths=phone"
                 + "&updateMask.fieldPaths=bio"
                 + "&updateMask.fieldPaths=status"
                 + "&updateMask.fieldPaths=joinCode"
@@ -38,8 +42,11 @@ public class CandidateDAO {
 
         JsonObject fields = new JsonObject();
         fields.add("electionId", str(candidate.getElectionId()));
+        fields.add("electionTitle", str(candidate.getElectionTitle()));
         fields.add("position", str(candidate.getPosition()));
         fields.add("name", str(candidate.getName()));
+        fields.add("email", str(candidate.getEmail()));
+        fields.add("phone", str(candidate.getPhone()));
         fields.add("bio", str(candidate.getBio()));
         fields.add("status", str(candidate.getStatus()));
         fields.add("joinCode", str(candidate.getJoinCode()));
@@ -55,7 +62,12 @@ public class CandidateDAO {
                 .method("PATCH", HttpRequest.BodyPublishers.ofString(body.toString(), StandardCharsets.UTF_8))
                 .build();
 
-        HttpResponse<String> res = CLIENT.send(req, HttpResponse.BodyHandlers.ofString());
+        HttpResponse<String> res;
+        try {
+            res = CLIENT.send(req, HttpResponse.BodyHandlers.ofString());
+        } catch (IOException | InterruptedException e) {
+            throw new FirestoreException("Unable to save candidate.", e);
+        }
         System.out.println("[CandidateDAO.save] " + res.statusCode());
         return res.statusCode() >= 200 && res.statusCode() < 300;
     }
@@ -65,7 +77,7 @@ public class CandidateDAO {
     // =========================================================
 
     public static boolean updateStatus(String candidateId, String status, String idToken)
-            throws IOException, InterruptedException {
+            throws FirestoreException {
 
         String url = BASE_URL + "/" + encode(candidateId)
                 + "?updateMask.fieldPaths=status";
@@ -83,7 +95,12 @@ public class CandidateDAO {
                 .method("PATCH", HttpRequest.BodyPublishers.ofString(body.toString(), StandardCharsets.UTF_8))
                 .build();
 
-        HttpResponse<String> res = CLIENT.send(req, HttpResponse.BodyHandlers.ofString());
+        HttpResponse<String> res;
+        try {
+            res = CLIENT.send(req, HttpResponse.BodyHandlers.ofString());
+        } catch (IOException | InterruptedException e) {
+            throw new FirestoreException("Unable to update candidate status.", e);
+        }
         return res.statusCode() >= 200 && res.statusCode() < 300;
     }
 
@@ -92,7 +109,7 @@ public class CandidateDAO {
     // =========================================================
 
     public static List<Candidate> getCandidatesByElection(String electionId, String idToken)
-            throws IOException, InterruptedException {
+            throws FirestoreException {
 
         String queryUrl = "https://firestore.googleapis.com/v1/projects/electravote-ca872/databases/(default)/documents:runQuery";
 
@@ -116,7 +133,60 @@ public class CandidateDAO {
                 .POST(HttpRequest.BodyPublishers.ofString(queryBody, StandardCharsets.UTF_8))
                 .build();
 
-        HttpResponse<String> res = CLIENT.send(req, HttpResponse.BodyHandlers.ofString());
+        HttpResponse<String> res;
+        try {
+            res = CLIENT.send(req, HttpResponse.BodyHandlers.ofString());
+        } catch (IOException | InterruptedException e) {
+            throw new FirestoreException("Unable to retrieve candidates.", e);
+        }
+
+        List<Candidate> result = new ArrayList<>();
+        if (res.statusCode() < 200 || res.statusCode() >= 300) return result;
+
+        JsonArray docs = JsonParser.parseString(res.body()).getAsJsonArray();
+        for (JsonElement el : docs) {
+            JsonObject obj = el.getAsJsonObject();
+            if (!obj.has("document")) continue;
+            result.add(parseCandidate(obj.getAsJsonObject("document")));
+        }
+        return result;
+    }
+
+    // =========================================================
+    // GET CANDIDATES BY ORGANIZATION (JOIN CODE)
+    // =========================================================
+
+    public static List<Candidate> getCandidatesByOrg(String joinCode, String idToken)
+            throws FirestoreException {
+
+        String queryUrl = "https://firestore.googleapis.com/v1/projects/electravote-ca872/databases/(default)/documents:runQuery";
+
+        String queryBody = "{"
+                + "\"structuredQuery\": {"
+                + "  \"from\": [{\"collectionId\": \"Candidates\"}],"
+                + "  \"where\": {"
+                + "    \"fieldFilter\": {"
+                + "      \"field\": {\"fieldPath\": \"joinCode\"},"
+                + "      \"op\": \"EQUAL\","
+                + "      \"value\": {\"stringValue\": \"" + joinCode + "\"}"
+                + "    }"
+                + "  }"
+                + "}"
+                + "}";
+
+        HttpRequest req = HttpRequest.newBuilder()
+                .uri(URI.create(queryUrl))
+                .header("Authorization", "Bearer " + idToken)
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(queryBody, StandardCharsets.UTF_8))
+                .build();
+
+        HttpResponse<String> res;
+        try {
+            res = CLIENT.send(req, HttpResponse.BodyHandlers.ofString());
+        } catch (IOException | InterruptedException e) {
+            throw new FirestoreException("Unable to retrieve candidates.", e);
+        }
 
         List<Candidate> result = new ArrayList<>();
         if (res.statusCode() < 200 || res.statusCode() >= 300) return result;
@@ -135,7 +205,7 @@ public class CandidateDAO {
     // =========================================================
 
     public static boolean deleteCandidate(String candidateId, String idToken)
-            throws IOException, InterruptedException {
+            throws FirestoreException {
 
         HttpRequest req = HttpRequest.newBuilder()
                 .uri(URI.create(BASE_URL + "/" + encode(candidateId)))
@@ -143,7 +213,12 @@ public class CandidateDAO {
                 .DELETE()
                 .build();
 
-        HttpResponse<String> res = CLIENT.send(req, HttpResponse.BodyHandlers.ofString());
+        HttpResponse<String> res;
+        try {
+            res = CLIENT.send(req, HttpResponse.BodyHandlers.ofString());
+        } catch (IOException | InterruptedException e) {
+            throw new FirestoreException("Unable to delete candidate.", e);
+        }
         return res.statusCode() >= 200 && res.statusCode() < 300;
     }
 
@@ -160,8 +235,11 @@ public class CandidateDAO {
         if (!doc.has("fields")) return c;
         JsonObject f = doc.getAsJsonObject("fields");
         c.setElectionId(str(f, "electionId"));
+        c.setElectionTitle(str(f, "electionTitle"));
         c.setPosition(str(f, "position"));
         c.setName(str(f, "name"));
+        c.setEmail(str(f, "email"));
+        c.setPhone(str(f, "phone"));
         c.setBio(str(f, "bio"));
         c.setStatus(str(f, "status"));
         c.setJoinCode(str(f, "joinCode"));

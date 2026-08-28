@@ -11,6 +11,7 @@ import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.PasswordField;
+import javafx.scene.control.ScrollPane;
 import javafx.scene.control.TextField;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.VBox;
@@ -68,6 +69,27 @@ public class SignUpVoter implements Page {
         emailField.setPromptText("Enter your email address");
         styleField(emailField);
 
+        // Phone Number
+        Label phoneLabel = new Label("Phone Number");
+        phoneLabel.setStyle("-fx-font-size: 14px; -fx-font-weight: bold; -fx-text-fill: #172554;");
+        TextField phoneField = new TextField();
+        phoneField.setPromptText("Enter your contact number");
+        styleField(phoneField);
+
+        // Department
+        Label deptLabel = new Label("Department / Major");
+        deptLabel.setStyle("-fx-font-size: 14px; -fx-font-weight: bold; -fx-text-fill: #172554;");
+        TextField deptField = new TextField();
+        deptField.setPromptText("e.g. Computer Engineering, Business, Science");
+        styleField(deptField);
+
+        // Category
+        Label catLabel = new Label("Membership Category");
+        catLabel.setStyle("-fx-font-size: 14px; -fx-font-weight: bold; -fx-text-fill: #172554;");
+        TextField catField = new TextField();
+        catField.setPromptText("e.g. Student, Faculty, Staff, Member");
+        styleField(catField);
+
         // Password
         Label passwordLabel = new Label("Password / Voting PIN");
         passwordLabel.setStyle("-fx-font-size: 14px; -fx-font-weight: bold; -fx-text-fill: #172554;");
@@ -94,10 +116,13 @@ public class SignUpVoter implements Page {
             String fullName = nameField.getText().trim();
             String code = joinCode.getText().trim();
             String email = emailField.getText().trim();
+            String phone = phoneField.getText().trim();
+            String dept = deptField.getText().trim();
+            String cat = catField.getText().trim();
             String pass = password.getText();
 
             if (fullName.isEmpty() || code.isEmpty() || email.isEmpty() || pass.isEmpty()) {
-                showAlert(Alert.AlertType.WARNING, "Missing Information", "Please fill in all fields.");
+                showAlert(Alert.AlertType.WARNING, "Missing Information", "Please fill in all required fields.");
                 return;
             }
 
@@ -109,7 +134,12 @@ public class SignUpVoter implements Page {
             // Run Firebase calls on a background thread
             Thread thread = new Thread(() -> {
 
-                String error = VoterController.signUp(fullName, email, pass, code);
+                String error = VoterController.signUp(
+                        fullName, email, pass, phone,
+                        cat.isEmpty() ? "Student" : cat,
+                        dept.isEmpty() ? "General" : dept,
+                        "Member",
+                        code);
 
                 Platform.runLater(() -> {
 
@@ -119,9 +149,9 @@ public class SignUpVoter implements Page {
 
                     if (error == null) {
                         // Success
-                        showAlert(Alert.AlertType.INFORMATION, "Registration Successful",
-                                "You have been registered successfully!\n\n" +
-                                "You can now sign in with your email and password.");
+                        showAlert(Alert.AlertType.INFORMATION, "Registration Submitted",
+                                "Your registration request has been submitted successfully!\n\n" +
+                                "Your eligibility will be reviewed by the organization administrator. Once approved, you can sign in with your email and password.");
                         if (backCallback != null) {
                             backCallback.run(); // Navigate to Sign In
                         }
@@ -158,11 +188,20 @@ public class SignUpVoter implements Page {
                 nameLabel, nameField,
                 codeLabel, joinCode,
                 emailLabel, emailField,
+                phoneLabel, phoneField,
+                deptLabel, deptField,
+                catLabel, catField,
                 passwordLabel, password,
                 statusLabel,
                 signUpBtn, backBtn);
 
-        container.getChildren().addAll(title, subtitle, card);
+        ScrollPane scroll = new ScrollPane(card);
+        scroll.setFitToWidth(true);
+        scroll.setStyle("-fx-background-color: transparent; -fx-background: transparent; -fx-padding: 0;");
+        scroll.setMaxWidth(530);
+        scroll.setPrefHeight(600);
+
+        container.getChildren().addAll(title, subtitle, scroll);
         root.setCenter(container);
 
         scene = new Scene(root);
@@ -182,6 +221,7 @@ public class SignUpVoter implements Page {
 
     private void showAlert(Alert.AlertType type, String title, String content) {
         Alert alert = new Alert(type);
+        com.electrovotesuperx.utils.Navigation.attachOwner(alert);
         alert.setTitle(title);
         alert.setHeaderText(null);
         alert.setContentText(content);

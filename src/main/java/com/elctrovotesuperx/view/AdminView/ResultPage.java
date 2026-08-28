@@ -1,11 +1,13 @@
 package com.elctrovotesuperx.view.AdminView;
 
-import java.io.File;
-import java.io.FileWriter;
-import java.io.IOException;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
+import com.elctrovotesuperx.config.SessionManager;
+import com.elctrovotesuperx.dao.AdminDAO.CandidateDAO;
+import com.elctrovotesuperx.dao.AdminDAO.ElectionDAO;
+import com.elctrovotesuperx.dao.AdminDAO.VoteDAO;
+import com.elctrovotesuperx.model.AdminModel.Candidate;
+import com.elctrovotesuperx.model.AdminModel.ElectionData;
 
+import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.control.*;
@@ -14,10 +16,20 @@ import javafx.scene.paint.Color;
 import javafx.scene.shape.Circle;
 import javafx.stage.FileChooser;
 
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.*;
+
 public class ResultPage extends VBox {
 
     private ComboBox<String> electionCombo;
     private VBox resultList;
+    private ProgressIndicator loadingIndicator;
+    private List<ElectionData> loadedElections = new ArrayList<>();
+    private ElectionResult currentResult;
 
     private static final String FONT = "-fx-font-family: 'Segoe UI', 'Inter', -apple-system, sans-serif;";
 
@@ -29,6 +41,8 @@ public class ResultPage extends VBox {
         ScrollPane scrollPane = buildResultScrollPane();
 
         getChildren().addAll(header, electionBar, scrollPane);
+
+        loadElectionsFromFirebase();
     }
 
     private void initializeContainerStyle() {
@@ -48,14 +62,14 @@ public class ResultPage extends VBox {
         title.setStyle(FONT
                 + "-fx-font-size: 24px; -fx-font-weight: 900; -fx-text-fill: #1e1b4b; -fx-letter-spacing: -0.5px;");
         Label subtitle = new Label(
-                "Certified final results, position-wise breakdown analytics, and secure report generation");
+                "Certified live results, position-wise breakdown analytics, and secure report generation");
         subtitle.setStyle(FONT + "-fx-font-size: 13px; -fx-text-fill: #4338ca; -fx-font-weight: 600;");
         titleBox.getChildren().addAll(title, subtitle);
 
         Region headerSpace = new Region();
         HBox.setHgrow(headerSpace, Priority.ALWAYS);
 
-        Label resultStatus = new Label("FINAL RESULT CERTIFIED");
+        Label resultStatus = new Label("LIVE RESULTS FEED");
         resultStatus.setStyle(FONT
                 + "-fx-background-color: #ecfdf5; -fx-text-fill: #047857; -fx-font-weight: 900; -fx-font-size: 11.5px; -fx-padding: 6 14; -fx-background-radius: 20; -fx-border-color: #10b981; -fx-border-radius: 20;");
 
@@ -64,7 +78,7 @@ public class ResultPage extends VBox {
     }
 
     private HBox buildElectionActionBar() {
-        HBox electionBar = new HBox(16);
+        HBox electionBar = new HBox(14);
         electionBar.setAlignment(Pos.CENTER_LEFT);
         electionBar.setPadding(new Insets(12, 20, 12, 20));
         electionBar.setStyle(
@@ -74,19 +88,20 @@ public class ResultPage extends VBox {
         selectLabel.setStyle(FONT + "-fx-font-size: 13.5px; -fx-font-weight: 800; -fx-text-fill: #1e1b4b;");
 
         electionCombo = new ComboBox<>();
-        electionCombo.setPromptText("Select certified election...");
-        electionCombo.setPrefWidth(340);
-        electionCombo.getItems().addAll(
-                "Student Council Election",
-                "Cultural Committee Election",
-                "Sports Committee Election");
+        electionCombo.setPromptText("Loading elections...");
+        electionCombo.setPrefWidth(320);
         electionCombo.setStyle(FONT
                 + "-fx-background-color: #f8fafc; -fx-border-color: #cbd5e1; -fx-border-radius: 8; -fx-background-radius: 8; -fx-font-size: 13px; -fx-font-weight: 600; -fx-padding: 4 8;");
-        electionCombo.setOnAction(e -> showResult());
+        electionCombo.setOnAction(e -> handleElectionSelection());
+
+        loadingIndicator = new ProgressIndicator();
+        loadingIndicator.setPrefSize(20, 20);
+        loadingIndicator.setVisible(false);
 
         Region barSpace = new Region();
         HBox.setHgrow(barSpace, Priority.ALWAYS);
 
+        Button refreshButton = createActionButton("🔄 Refresh", "#4f46e5", e -> handleElectionSelection());
         Button summarizeButton = createActionButton("📊 Summarize Winners", "#2563eb", e -> showSummary());
         Button exportReportBtn = createActionButton("📥 Export Certified Tally (.txt)", "#ecfdf5",
                 e -> exportResultReport());
@@ -94,7 +109,7 @@ public class ResultPage extends VBox {
         exportReportBtn.setStyle(FONT
                 + "-fx-background-color: #ecfdf5; -fx-text-fill: #047857; -fx-border-color: #10b981; -fx-border-radius: 8; -fx-font-weight: 800; -fx-font-size: 12.5px; -fx-padding: 8 16; -fx-background-radius: 8; -fx-cursor: hand;");
 
-        electionBar.getChildren().addAll(selectLabel, electionCombo, barSpace, summarizeButton, exportReportBtn);
+        electionBar.getChildren().addAll(selectLabel, electionCombo, loadingIndicator, barSpace, refreshButton, summarizeButton, exportReportBtn);
         return electionBar;
     }
 
@@ -136,35 +151,235 @@ public class ResultPage extends VBox {
         title.setStyle(FONT + "-fx-font-size: 19px; -fx-font-weight: 900; -fx-text-fill: #1e1b4b;");
 
         Label text = new Label(
-                "Select a certified election from the dropdown above to examine detailed position metrics and vote distributions.");
+                "Select an active or closed election from the dropdown above to view live certified vote distributions.");
         text.setStyle(FONT + "-fx-text-fill: #64748b; -fx-font-size: 13px;");
 
         message.getChildren().addAll(icon, title, text);
         resultList.getChildren().add(message);
     }
 
-    private void showResult() {
-        resultList.getChildren().clear();
-        String selectedElection = electionCombo.getValue();
+    public void loadElectionsFromFirebase() {
+        loadingIndicator.setVisible(true);
 
-        if (selectedElection == null) {
+        Thread thread = new Thread(() -> {
+            try {
+                String joinCode = SessionManager.joinCode;
+                String idToken = SessionManager.idToken;
+
+                if (joinCode == null || joinCode.isBlank()) {
+                    Platform.runLater(() -> {
+                        loadingIndicator.setVisible(false);
+                        electionCombo.setPromptText("No organization logged in");
+                    });
+                    return;
+                }
+
+                List<ElectionData> elections = ElectionDAO.getElectionsByOrg(joinCode, idToken);
+
+                Platform.runLater(() -> {
+                    loadedElections = elections;
+                    electionCombo.getItems().clear();
+
+                    if (elections.isEmpty()) {
+                        electionCombo.setPromptText("No elections created yet");
+                        showEmptyElectionsMessage();
+                    } else {
+                        for (ElectionData election : elections) {
+                            String title = election.getTitle() != null ? election.getTitle() : "Untitled Election";
+                            electionCombo.getItems().add(title);
+                        }
+                        electionCombo.getSelectionModel().selectFirst();
+                        handleElectionSelection();
+                    }
+                    loadingIndicator.setVisible(false);
+                });
+
+            } catch (Exception ex) {
+                ex.printStackTrace();
+                Platform.runLater(() -> {
+                    loadingIndicator.setVisible(false);
+                    electionCombo.setPromptText("Failed to load elections");
+                });
+            }
+        });
+        thread.setDaemon(true);
+        thread.start();
+    }
+
+    private void showEmptyElectionsMessage() {
+        resultList.getChildren().clear();
+
+        VBox message = new VBox(12);
+        message.setAlignment(Pos.CENTER);
+        message.setPrefHeight(320);
+        message.setStyle(
+                "-fx-background-color: #ffffff; -fx-background-radius: 14; -fx-border-color: #cbd5e1; -fx-border-radius: 14; -fx-border-width: 1.5;");
+
+        Label icon = new Label("🗳️");
+        icon.setStyle(FONT + "-fx-font-size: 42px;");
+
+        Label title = new Label("No Elections in Organization");
+        title.setStyle(FONT + "-fx-font-size: 19px; -fx-font-weight: 900; -fx-text-fill: #1e1b4b;");
+
+        Label text = new Label("Create your first election under the Elections tab to begin receiving ballots.");
+        text.setStyle(FONT + "-fx-text-fill: #64748b; -fx-font-size: 13px;");
+
+        message.getChildren().addAll(icon, title, text);
+        resultList.getChildren().add(message);
+    }
+
+    private void handleElectionSelection() {
+        String selectedTitle = electionCombo.getValue();
+        if (selectedTitle == null) {
             showSelectElectionMessage();
             return;
         }
 
-        ElectionResult result = getElectionResult(selectedElection);
+        ElectionData selectedElection = loadedElections.stream()
+                .filter(e -> selectedTitle.equals(e.getTitle()))
+                .findFirst()
+                .orElse(null);
+
+        if (selectedElection == null) {
+            return;
+        }
+
+        loadingIndicator.setVisible(true);
+        resultList.getChildren().clear();
+
+        VBox loadingBox = new VBox(12);
+        loadingBox.setAlignment(Pos.CENTER);
+        loadingBox.setPrefHeight(250);
+        Label loadingLbl = new Label("Fetching live certified results from Firebase...");
+        loadingLbl.setStyle(FONT + "-fx-font-size: 14px; -fx-font-weight: 700; -fx-text-fill: #4338ca;");
+        loadingBox.getChildren().addAll(new ProgressIndicator(), loadingLbl);
+        resultList.getChildren().add(loadingBox);
+
+        Thread thread = new Thread(() -> {
+            try {
+                String idToken = SessionManager.idToken;
+                String electionId = selectedElection.getId();
+
+                List<Candidate> candidates = CandidateDAO.getCandidatesByElection(electionId, idToken);
+                Map<String, Map<String, Integer>> voteResults = VoteDAO.getResults(electionId, idToken);
+
+                ElectionResult electionResult = buildElectionResultFromFirebase(selectedElection, candidates, voteResults);
+
+                Platform.runLater(() -> {
+                    this.currentResult = electionResult;
+                    renderResultUI(electionResult, selectedElection);
+                    loadingIndicator.setVisible(false);
+                });
+
+            } catch (Exception ex) {
+                ex.printStackTrace();
+                Platform.runLater(() -> {
+                    loadingIndicator.setVisible(false);
+                    showStyledAlert("Data Error", "Unable to load live election results: " + ex.getMessage(), "✕", "#dc2626", "#fee2e2");
+                });
+            }
+        });
+        thread.setDaemon(true);
+        thread.start();
+    }
+
+    private ElectionResult buildElectionResultFromFirebase(
+            ElectionData election,
+            List<Candidate> candidates,
+            Map<String, Map<String, Integer>> voteResults) {
+
+        Set<String> positionsSet = new LinkedHashSet<>();
+        if (election.getPositions() != null) {
+            positionsSet.addAll(election.getPositions());
+        }
+        for (Candidate c : candidates) {
+            if (c.getPosition() != null && !c.getPosition().isBlank()) {
+                positionsSet.add(c.getPosition());
+            }
+        }
+        positionsSet.addAll(voteResults.keySet());
+
+        List<PositionResult> positionResults = new ArrayList<>();
+
+        for (String positionName : positionsSet) {
+            Map<String, Integer> tallyMap = voteResults.getOrDefault(positionName, Collections.emptyMap());
+
+            List<CandidateResult> candidateList = new ArrayList<>();
+            Set<String> processedCandidates = new HashSet<>();
+
+            for (Candidate c : candidates) {
+                if (positionName.equalsIgnoreCase(c.getPosition())) {
+                    String name = c.getName() != null ? c.getName() : "Unnamed Candidate";
+                    int votes = tallyMap.getOrDefault(name, 0);
+                    candidateList.add(new CandidateResult(name, votes, 0.0));
+                    processedCandidates.add(name);
+                }
+            }
+
+            for (Map.Entry<String, Integer> entry : tallyMap.entrySet()) {
+                if (!processedCandidates.contains(entry.getKey())) {
+                    candidateList.add(new CandidateResult(entry.getKey(), entry.getValue(), 0.0));
+                }
+            }
+
+            int positionTotalVotes = candidateList.stream().mapToInt(c -> c.votes).sum();
+
+            for (CandidateResult cr : candidateList) {
+                if (positionTotalVotes > 0) {
+                    cr.percentage = (cr.votes * 100.0) / positionTotalVotes;
+                } else {
+                    cr.percentage = 0.0;
+                }
+            }
+
+            candidateList.sort((a, b) -> Integer.compare(b.votes, a.votes));
+
+            PositionResult pr = new PositionResult(
+                    positionName,
+                    candidateList.toArray(new CandidateResult[0]),
+                    positionTotalVotes);
+
+            positionResults.add(pr);
+        }
+
+        return new ElectionResult(election.getTitle(), positionResults.toArray(new PositionResult[0]));
+    }
+
+    private void renderResultUI(ElectionResult result, ElectionData electionData) {
+        resultList.getChildren().clear();
+
+        VBox electionHeader = new VBox(6);
+        electionHeader.setPadding(new Insets(4, 0, 8, 0));
+
+        HBox titleRow = new HBox(12);
+        titleRow.setAlignment(Pos.CENTER_LEFT);
 
         Label electionName = new Label(result.electionName);
-        electionName.setStyle(FONT + "-fx-font-size: 20px; -fx-font-weight: 900; -fx-text-fill: #1e1b4b;");
+        electionName.setStyle(FONT + "-fx-font-size: 21px; -fx-font-weight: 900; -fx-text-fill: #1e1b4b;");
 
-        Label subtitle = new Label("Certified final breakdown • Position-wise vote analytics & candidate rankings");
+        String statusStr = electionData.getStatus() != null ? electionData.getStatus().toUpperCase() : "ACTIVE";
+        Label statusBadge = new Label("STATUS: " + statusStr);
+        statusBadge.setStyle(FONT + "-fx-background-color: #eff6ff; -fx-text-fill: #2563eb; -fx-font-size: 11px; -fx-font-weight: 800; -fx-padding: 3 10; -fx-background-radius: 12; -fx-border-color: #bfdbfe; -fx-border-radius: 12;");
+
+        titleRow.getChildren().addAll(electionName, statusBadge);
+
+        Label subtitle = new Label("Certified Real-Time Breakdown • Verified Ballot Tally & Candidate Standings");
         subtitle.setStyle(FONT + "-fx-text-fill: #4338ca; -fx-font-size: 13px; -fx-font-weight: 600;");
 
-        VBox electionHeader = new VBox(4);
-        electionHeader.setPadding(new Insets(4, 0, 6, 0));
-        electionHeader.getChildren().addAll(electionName, subtitle);
-
+        electionHeader.getChildren().addAll(titleRow, subtitle);
         resultList.getChildren().add(electionHeader);
+
+        if (result.positions.length == 0) {
+            VBox noPosBox = new VBox(10);
+            noPosBox.setAlignment(Pos.CENTER);
+            noPosBox.setPrefHeight(200);
+            noPosBox.setStyle("-fx-background-color: #ffffff; -fx-background-radius: 12; -fx-border-color: #e2e8f0; -fx-border-radius: 12;");
+            Label noPosLbl = new Label("No ballot positions configured for this election.");
+            noPosLbl.setStyle(FONT + "-fx-font-size: 14px; -fx-text-fill: #64748b; -fx-font-weight: 600;");
+            noPosBox.getChildren().add(noPosLbl);
+            resultList.getChildren().add(noPosBox);
+            return;
+        }
 
         for (PositionResult position : result.positions) {
             resultList.getChildren().add(createPositionResult(position));
@@ -172,18 +387,16 @@ public class ResultPage extends VBox {
     }
 
     private void exportResultReport() {
-        String selected = electionCombo.getValue();
-        if (selected == null) {
-            showStyledAlert("Select Election", "Please select an election before exporting the certified report.", "⚠️",
+        if (currentResult == null || currentResult.positions.length == 0) {
+            showStyledAlert("No Data to Export", "Please select an election with available results before exporting.", "⚠️",
                     "#d97706", "#fffbeb");
             return;
         }
 
-        ElectionResult result = getElectionResult(selected);
-
         FileChooser fileChooser = new FileChooser();
         fileChooser.setTitle("Save Certified Election Report");
-        fileChooser.setInitialFileName("ElectraVote_Certified_Tally_" + System.currentTimeMillis() + ".txt");
+        String sanitizedName = currentResult.electionName.replaceAll("[^a-zA-Z0-9_-]", "_");
+        fileChooser.setInitialFileName("ElectraVote_Tally_" + sanitizedName + "_" + System.currentTimeMillis() + ".txt");
         fileChooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("Text Files (*.txt)", "*.txt"));
 
         File file = fileChooser.showSaveDialog(AdminDashboard.AdminDashboardStage);
@@ -193,27 +406,32 @@ public class ResultPage extends VBox {
                 writer.write("                ELECTRAVOTE SaaS ELECTION PLATFORM                  \n");
                 writer.write("                 OFFICIAL CERTIFIED RESULT TALLY                    \n");
                 writer.write("====================================================================\n\n");
-                writer.write("Tenant Organization     : ABC College\n");
-                writer.write("Election Title          : " + result.electionName + "\n");
+                writer.write("Tenant Organization     : " + (SessionManager.organizationName != null ? SessionManager.organizationName : "ElectraVote Tenant") + "\n");
+                writer.write("Organization Join Code  : " + (SessionManager.joinCode != null ? SessionManager.joinCode : "N/A") + "\n");
+                writer.write("Election Title          : " + currentResult.electionName + "\n");
                 writer.write("Certification Timestamp : "
                         + LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd MMM yyyy, HH:mm:ss")) + "\n");
-                writer.write("Ballot Privacy Standard : Zero-Knowledge Decoupled (Voter-to-Choice Blind)\n\n");
+                writer.write("Ballot Privacy Standard : Zero-Knowledge Decoupled Cryptographic Ledger\n\n");
                 writer.write("--------------------------------------------------------------------\n");
                 writer.write("POSITION-WISE RESULTS BREAKDOWN\n");
                 writer.write("--------------------------------------------------------------------\n\n");
 
-                for (PositionResult pos : result.positions) {
+                for (PositionResult pos : currentResult.positions) {
                     writer.write("Office: " + pos.positionName + " (Total Ballots: " + pos.totalVotes + ")\n");
+                    if (pos.candidates.length == 0) {
+                        writer.write("  [No candidates registered for this position]\n\n");
+                        continue;
+                    }
                     int r = 1;
                     for (CandidateResult c : pos.candidates) {
                         writer.write(
-                                String.format("  #%d %-20s : %4d votes (%.1f%%)\n", r, c.name, c.votes, c.percentage));
+                                String.format("  #%d %-24s : %4d votes (%.1f%%)\n", r, c.name, c.votes, c.percentage));
                         r++;
                     }
                     writer.write("\n");
                 }
                 writer.write("====================================================================\n");
-                writer.write("End of Certified Report. Verified by ElectraVote Zero-Knowledge Engine.\n");
+                writer.write("End of Certified Report. Cryptographically Verified by ElectraVote Engine.\n");
 
                 showStyledAlert("Export Successful",
                         "Certified election result report successfully saved to disk:\n" + file.getAbsolutePath(), "✓",
@@ -225,28 +443,27 @@ public class ResultPage extends VBox {
     }
 
     private void showSummary() {
-        String selectedElection = electionCombo.getValue();
-
-        if (selectedElection == null) {
-            showStyledAlert("Select Election", "Please select an election before generating the summary report.", "⚠️",
+        if (currentResult == null || currentResult.positions.length == 0) {
+            showStyledAlert("Select Election", "Please select an election with results before generating the summary report.", "⚠️",
                     "#d97706", "#fffbeb");
             return;
         }
 
-        ElectionResult result = getElectionResult(selectedElection);
-
         Dialog<ButtonType> dialog = new Dialog<>();
         if (AdminDashboard.AdminDashboardStage != null) {
             dialog.initOwner(AdminDashboard.AdminDashboardStage);
+            dialog.initModality(javafx.stage.Modality.WINDOW_MODAL);
+        } else {
+            com.electrovotesuperx.utils.Navigation.attachOwner(dialog);
         }
-        dialog.setTitle("Election Summary");
+        dialog.setTitle("Official Election Summary");
 
         VBox summaryBox = new VBox(14);
         summaryBox.setPadding(new Insets(24));
         summaryBox.setPrefWidth(520);
         summaryBox.setStyle("-fx-background-color: #ffffff; " + FONT);
 
-        Label electionName = new Label(result.electionName);
+        Label electionName = new Label(currentResult.electionName);
         electionName.setStyle(FONT + "-fx-font-size: 19px; -fx-font-weight: 900; -fx-text-fill: #1e1b4b;");
 
         Label summarySubtitle = new Label("Official Position-Wise Winner Summary");
@@ -254,7 +471,7 @@ public class ResultPage extends VBox {
 
         summaryBox.getChildren().addAll(electionName, summarySubtitle, new Separator());
 
-        for (PositionResult position : result.positions) {
+        for (PositionResult position : currentResult.positions) {
             CandidateResult winner = findWinner(position);
             summaryBox.getChildren().add(createWinnerSummary(position, winner));
         }
@@ -281,6 +498,9 @@ public class ResultPage extends VBox {
     }
 
     private CandidateResult findWinner(PositionResult position) {
+        if (position.candidates == null || position.candidates.length == 0) {
+            return new CandidateResult("No candidate", 0, 0.0);
+        }
         CandidateResult winner = position.candidates[0];
         for (CandidateResult candidate : position.candidates) {
             if (candidate.votes > winner.votes) {
@@ -299,7 +519,7 @@ public class ResultPage extends VBox {
         Label positionLabel = new Label("🏆  " + position.positionName);
         positionLabel.setStyle(FONT + "-fx-font-size: 14.5px; -fx-font-weight: 900; -fx-text-fill: #1e1b4b;");
 
-        Label winnerLabel = new Label("Elected Winner: " + winner.name);
+        Label winnerLabel = new Label(winner.votes > 0 ? "Leading Winner: " + winner.name : "Top Contender: " + winner.name);
         winnerLabel.setStyle(FONT + "-fx-font-size: 14px; -fx-font-weight: 900; -fx-text-fill: #059669;");
 
         HBox statsRow = new HBox(20);
@@ -336,6 +556,13 @@ public class ResultPage extends VBox {
         positionHeader.getChildren().addAll(positionName, space, totalVotes);
         positionBox.getChildren().add(positionHeader);
 
+        if (position.candidates == null || position.candidates.length == 0) {
+            Label noCand = new Label("No registered candidates for this office.");
+            noCand.setStyle(FONT + "-fx-font-size: 12.5px; -fx-text-fill: #94a3b8; -fx-padding: 8 0;");
+            positionBox.getChildren().add(noCand);
+            return positionBox;
+        }
+
         int maxVotes = -1;
         for (CandidateResult c : position.candidates) {
             if (c.votes > maxVotes)
@@ -344,7 +571,7 @@ public class ResultPage extends VBox {
 
         int rank = 1;
         for (CandidateResult candidate : position.candidates) {
-            boolean isWinner = (candidate.votes == maxVotes);
+            boolean isWinner = (candidate.votes > 0 && candidate.votes == maxVotes);
             positionBox.getChildren().add(createCandidateResultCard(candidate, rank, isWinner));
             rank++;
         }
@@ -424,7 +651,7 @@ public class ResultPage extends VBox {
 
         Region voteBarFill = new Region();
         voteBarFill.setPrefHeight(14);
-        double barWidth = Math.max(12, 260 * (candidate.percentage / 100.0));
+        double barWidth = candidate.percentage > 0 ? Math.max(12, 260 * (candidate.percentage / 100.0)) : 0;
         voteBarFill.setMaxWidth(barWidth);
         voteBarFill.setMinWidth(barWidth);
         voteBarFill.setStyle("-fx-background-color: linear-gradient(to right, "
@@ -442,6 +669,9 @@ public class ResultPage extends VBox {
         Dialog<ButtonType> alert = new Dialog<>();
         if (AdminDashboard.AdminDashboardStage != null) {
             alert.initOwner(AdminDashboard.AdminDashboardStage);
+            alert.initModality(javafx.stage.Modality.WINDOW_MODAL);
+        } else {
+            com.electrovotesuperx.utils.Navigation.attachOwner(alert);
         }
         alert.setTitle("System Notification");
 
@@ -487,53 +717,6 @@ public class ResultPage extends VBox {
         alert.showAndWait();
     }
 
-    private ElectionResult getElectionResult(String election) {
-        if (election.equals("Student Council Election")) {
-            PositionResult president = new PositionResult("President", new CandidateResult[] {
-                    new CandidateResult("Rahul Sharma", 1250, 62.5),
-                    new CandidateResult("Amit Kulkarni", 650, 32.5),
-                    new CandidateResult("Vikas Patil", 100, 5.0)
-            });
-            PositionResult secretary = new PositionResult("Secretary", new CandidateResult[] {
-                    new CandidateResult("Priya Patil", 1100, 55.0),
-                    new CandidateResult("Rohit More", 900, 45.0)
-            });
-            PositionResult treasurer = new PositionResult("Treasurer", new CandidateResult[] {
-                    new CandidateResult("Sneha Joshi", 1400, 70.0),
-                    new CandidateResult("Neha Deshmukh", 600, 30.0)
-            });
-            return new ElectionResult(election, new PositionResult[] { president, secretary, treasurer });
-        }
-
-        if (election.equals("Cultural Committee Election")) {
-            PositionResult president = new PositionResult("President", new CandidateResult[] {
-                    new CandidateResult("Neha Deshmukh", 900, 60.0),
-                    new CandidateResult("Akash More", 450, 30.0),
-                    new CandidateResult("Pooja Patil", 150, 10.0)
-            });
-            PositionResult secretary = new PositionResult("Secretary", new CandidateResult[] {
-                    new CandidateResult("Kunal Joshi", 700, 53.8),
-                    new CandidateResult("Pooja Patil", 600, 46.2)
-            });
-            return new ElectionResult(election, new PositionResult[] { president, secretary });
-        }
-
-        if (election.equals("Sports Committee Election")) {
-            PositionResult president = new PositionResult("President", new CandidateResult[] {
-                    new CandidateResult("Rohan Sharma", 720, 60.0),
-                    new CandidateResult("Aditya More", 360, 30.0),
-                    new CandidateResult("Sahil Patil", 120, 10.0)
-            });
-            PositionResult secretary = new PositionResult("Secretary", new CandidateResult[] {
-                    new CandidateResult("Om Kulkarni", 650, 54.2),
-                    new CandidateResult("Sahil Patil", 550, 45.8)
-            });
-            return new ElectionResult(election, new PositionResult[] { president, secretary });
-        }
-
-        return new ElectionResult(election, new PositionResult[] {});
-    }
-
     private static class ElectionResult {
         String electionName;
         PositionResult[] positions;
@@ -549,12 +732,10 @@ public class ResultPage extends VBox {
         CandidateResult[] candidates;
         int totalVotes;
 
-        PositionResult(String positionName, CandidateResult[] candidates) {
+        PositionResult(String positionName, CandidateResult[] candidates, int totalVotes) {
             this.positionName = positionName;
             this.candidates = candidates;
-            for (CandidateResult candidate : candidates) {
-                totalVotes += candidate.votes;
-            }
+            this.totalVotes = totalVotes;
         }
     }
 

@@ -129,11 +129,21 @@ public class SignInVoter implements Page {
 
                         Voter voter = result.getVoter();
 
+                        // Set SessionManager for voter
+                        com.elctrovotesuperx.config.SessionManager.idToken = result.getIdToken();
+                        com.elctrovotesuperx.config.SessionManager.joinCode = voter.getJoinCode();
+                        com.elctrovotesuperx.config.SessionManager.organizationName = voter.getOrganizationName();
+                        com.elctrovotesuperx.config.SessionManager.voterUid = voter.getUid();
+                        com.elctrovotesuperx.config.SessionManager.voterEmail = voter.getEmail();
+                        com.elctrovotesuperx.config.SessionManager.voterName = voter.getFullName();
+                        com.elctrovotesuperx.config.SessionManager.voterStatus = voter.getStatus();
+                        com.elctrovotesuperx.config.SessionManager.voterPhone = voter.getPhone();
+
                         // Load voter data into the dashboard
                         VoterDashboard.loadVoterData(
                                 voter.getFullName(),
                                 "Eligible Voter",
-                                "Verified",
+                                voter.getStatus() != null ? voter.getStatus() : "Verified",
                                 "0",
                                 voter.getOrganizationName()
                         );
@@ -234,6 +244,7 @@ public class SignInVoter implements Page {
 
     private void showAlert(Alert.AlertType type, String title, String content) {
         Alert alert = new Alert(type);
+        com.electrovotesuperx.utils.Navigation.attachOwner(alert);
         alert.setTitle(title);
         alert.setHeaderText(null);
         alert.setContentText(content);

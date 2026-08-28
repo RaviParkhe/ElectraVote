@@ -9,6 +9,8 @@ public class Voter {
     private String joinCode;
     private String role;
     private String organizationName;
+    private String status;
+    private String phone;
 
     public Voter() {
     }
@@ -19,6 +21,7 @@ public class Voter {
         this.password = password;
         this.joinCode = joinCode;
         this.role = "VOTER";
+        this.status = "APPROVED";
     }
 
     public String getUid() {
@@ -76,4 +79,21 @@ public class Voter {
     public void setOrganizationName(String organizationName) {
         this.organizationName = organizationName;
     }
+
+    public String getStatus() {
+        return status;
+    }
+
+    public void setStatus(String status) {
+        this.status = status;
+    }
+
+    public String getPhone() {
+        return phone;
+    }
+
+    public void setPhone(String phone) {
+        this.phone = phone;
+    }
 }
+

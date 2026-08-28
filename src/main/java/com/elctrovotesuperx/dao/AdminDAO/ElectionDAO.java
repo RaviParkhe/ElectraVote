@@ -1,5 +1,6 @@
 package com.elctrovotesuperx.dao.AdminDAO;
 
+import com.elctrovotesuperx.exception.FirestoreException;
 import com.elctrovotesuperx.model.AdminModel.ElectionData;
 import com.google.gson.*;
 
@@ -31,7 +32,7 @@ public class ElectionDAO {
     // =========================================================
 
     public static boolean saveElection(ElectionData election, String idToken)
-            throws IOException, InterruptedException {
+            throws FirestoreException {
 
         String url = BASE_URL + "/" + encode(election.getId())
                 + "?updateMask.fieldPaths=title"
@@ -63,7 +64,12 @@ public class ElectionDAO {
                 .method("PATCH", HttpRequest.BodyPublishers.ofString(body.toString(), StandardCharsets.UTF_8))
                 .build();
 
-        HttpResponse<String> res = CLIENT.send(req, HttpResponse.BodyHandlers.ofString());
+        HttpResponse<String> res;
+        try {
+            res = CLIENT.send(req, HttpResponse.BodyHandlers.ofString());
+        } catch (IOException | InterruptedException e) {
+            throw new FirestoreException("Unable to save election data.", e);
+        }
         System.out.println("[ElectionDAO.saveElection] " + res.statusCode() + " " + res.body());
         return res.statusCode() >= 200 && res.statusCode() < 300;
     }
@@ -73,7 +79,7 @@ public class ElectionDAO {
     // =========================================================
 
     public static boolean updatePositions(String electionId, List<String> positions, String idToken)
-            throws IOException, InterruptedException {
+            throws FirestoreException {
 
         String url = BASE_URL + "/" + encode(electionId)
                 + "?updateMask.fieldPaths=positions";
@@ -91,7 +97,12 @@ public class ElectionDAO {
                 .method("PATCH", HttpRequest.BodyPublishers.ofString(body.toString(), StandardCharsets.UTF_8))
                 .build();
 
-        HttpResponse<String> res = CLIENT.send(req, HttpResponse.BodyHandlers.ofString());
+        HttpResponse<String> res;
+        try {
+            res = CLIENT.send(req, HttpResponse.BodyHandlers.ofString());
+        } catch (IOException | InterruptedException e) {
+            throw new FirestoreException("Unable to update election positions.", e);
+        }
         return res.statusCode() >= 200 && res.statusCode() < 300;
     }
 
@@ -100,7 +111,7 @@ public class ElectionDAO {
     // =========================================================
 
     public static boolean deleteElection(String electionId, String idToken)
-            throws IOException, InterruptedException {
+            throws FirestoreException {
 
         String url = BASE_URL + "/" + encode(electionId);
 
@@ -110,7 +121,12 @@ public class ElectionDAO {
                 .DELETE()
                 .build();
 
-        HttpResponse<String> res = CLIENT.send(req, HttpResponse.BodyHandlers.ofString());
+        HttpResponse<String> res;
+        try {
+            res = CLIENT.send(req, HttpResponse.BodyHandlers.ofString());
+        } catch (IOException | InterruptedException e) {
+            throw new FirestoreException("Unable to delete election.", e);
+        }
         return res.statusCode() >= 200 && res.statusCode() < 300;
     }
 
@@ -119,7 +135,7 @@ public class ElectionDAO {
     // =========================================================
 
     public static List<ElectionData> getElectionsByOrg(String joinCode, String idToken)
-            throws IOException, InterruptedException {
+            throws FirestoreException {
 
         List<ElectionData> result = new ArrayList<>();
         String url = BASE_URL + "?pageSize=300";
@@ -132,7 +148,12 @@ public class ElectionDAO {
             builder.header("Authorization", "Bearer " + idToken);
         }
 
-        HttpResponse<String> res = CLIENT.send(builder.build(), HttpResponse.BodyHandlers.ofString());
+        HttpResponse<String> res;
+        try {
+            res = CLIENT.send(builder.build(), HttpResponse.BodyHandlers.ofString());
+        } catch (IOException | InterruptedException e) {
+            throw new FirestoreException("Unable to retrieve elections.", e);
+        }
         System.out.println("[ElectionDAO.getElections] HTTP " + res.statusCode());
 
         if (res.statusCode() >= 200 && res.statusCode() < 300) {

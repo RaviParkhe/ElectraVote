@@ -4,6 +4,7 @@ import com.elctrovotesuperx.config.SessionManager;
 import com.elctrovotesuperx.dao.AdminDAO.ElectionDAO;
 import com.elctrovotesuperx.dao.AdminDAO.CandidateDAO;
 import com.elctrovotesuperx.dao.AdminDAO.VoteDAO;
+import com.elctrovotesuperx.exception.FirestoreException;
 import com.elctrovotesuperx.model.AdminModel.Candidate;
 import com.elctrovotesuperx.model.AdminModel.ElectionData;
 import com.elctrovotesuperx.model.AdminModel.VoteRecord;
@@ -43,9 +44,8 @@ public class ElectionController {
         try {
             boolean ok = ElectionDAO.saveElection(election, SessionManager.idToken);
             return ok ? null : "Failed to save election to Firestore.";
-        } catch (Exception e) {
-            e.printStackTrace();
-            return "Error: " + e.getMessage();
+        } catch (FirestoreException e) {
+            return "Unable to save election. Please check your connection and try again.";
         }
     }
 
@@ -55,9 +55,8 @@ public class ElectionController {
         try {
             boolean ok = ElectionDAO.saveElection(election, SessionManager.idToken);
             return ok ? null : "Failed to update election.";
-        } catch (Exception e) {
-            e.printStackTrace();
-            return "Error: " + e.getMessage();
+        } catch (FirestoreException e) {
+            return "Unable to update election. Please check your connection and try again.";
         }
     }
 
@@ -67,9 +66,8 @@ public class ElectionController {
         try {
             boolean ok = ElectionDAO.updatePositions(electionId, positions, SessionManager.idToken);
             return ok ? null : "Failed to update positions.";
-        } catch (Exception e) {
-            e.printStackTrace();
-            return "Error: " + e.getMessage();
+        } catch (FirestoreException e) {
+            return "Unable to update positions. Please check your connection and try again.";
         }
     }
 
@@ -79,9 +77,8 @@ public class ElectionController {
         try {
             boolean ok = ElectionDAO.deleteElection(electionId, SessionManager.idToken);
             return ok ? null : "Failed to delete election.";
-        } catch (Exception e) {
-            e.printStackTrace();
-            return "Error: " + e.getMessage();
+        } catch (FirestoreException e) {
+            return "Unable to delete election. Please check your connection and try again.";
         }
     }
 
@@ -90,8 +87,7 @@ public class ElectionController {
         if (!SessionManager.isLoggedIn()) return new ArrayList<>();
         try {
             return ElectionDAO.getElectionsByOrg(SessionManager.joinCode, SessionManager.idToken);
-        } catch (Exception e) {
-            e.printStackTrace();
+        } catch (FirestoreException e) {
             return new ArrayList<>();
         }
     }
@@ -117,9 +113,8 @@ public class ElectionController {
         try {
             boolean ok = CandidateDAO.saveCandidate(c, SessionManager.idToken);
             return ok ? null : "Failed to save candidate.";
-        } catch (Exception e) {
-            e.printStackTrace();
-            return "Error: " + e.getMessage();
+        } catch (FirestoreException e) {
+            return "Unable to save candidate. Please check your connection and try again.";
         }
     }
 
@@ -129,9 +124,8 @@ public class ElectionController {
         try {
             boolean ok = CandidateDAO.updateStatus(candidateId, status, SessionManager.idToken);
             return ok ? null : "Failed to update candidate status.";
-        } catch (Exception e) {
-            e.printStackTrace();
-            return "Error: " + e.getMessage();
+        } catch (FirestoreException e) {
+            return "Unable to update candidate status. Please check your connection and try again.";
         }
     }
 
@@ -140,8 +134,7 @@ public class ElectionController {
         if (!SessionManager.isLoggedIn()) return new ArrayList<>();
         try {
             return CandidateDAO.getCandidatesByElection(electionId, SessionManager.idToken);
-        } catch (Exception e) {
-            e.printStackTrace();
+        } catch (FirestoreException e) {
             return new ArrayList<>();
         }
     }
@@ -155,8 +148,7 @@ public class ElectionController {
         if (!SessionManager.isLoggedIn()) return new LinkedHashMap<>();
         try {
             return VoteDAO.getResults(electionId, SessionManager.idToken);
-        } catch (Exception e) {
-            e.printStackTrace();
+        } catch (FirestoreException e) {
             return new LinkedHashMap<>();
         }
     }

@@ -3,6 +3,7 @@ package com.elctrovotesuperx.controller.OnlineVotingController;
 import com.elctrovotesuperx.dao.AdminDAO.CandidateDAO;
 import com.elctrovotesuperx.dao.AdminDAO.ElectionDAO;
 import com.elctrovotesuperx.dao.AdminDAO.VoteDAO;
+import com.elctrovotesuperx.exception.FirestoreException;
 import com.elctrovotesuperx.model.AdminModel.Candidate;
 import com.elctrovotesuperx.model.AdminModel.ElectionData;
 import com.elctrovotesuperx.model.AdminModel.VoteRecord;
@@ -36,8 +37,7 @@ public class OnlineVotingController {
                 }
             }
             return active;
-        } catch (Exception e) {
-            e.printStackTrace();
+        } catch (FirestoreException e) {
             return new ArrayList<>();
         }
     }
@@ -61,8 +61,7 @@ public class OnlineVotingController {
                 }
             }
             return approved;
-        } catch (Exception e) {
-            e.printStackTrace();
+        } catch (FirestoreException e) {
             return new ArrayList<>();
         }
     }
@@ -104,9 +103,8 @@ public class OnlineVotingController {
             boolean ok = VoteDAO.castVote(vote, idToken);
             return ok ? null : "Failed to record your vote. Please try again.";
 
-        } catch (Exception e) {
-            e.printStackTrace();
-            return "Error casting vote: " + e.getMessage();
+        } catch (FirestoreException e) {
+            return "Unable to cast vote. Please check your connection and try again.";
         }
     }
 }

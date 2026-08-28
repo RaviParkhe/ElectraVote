@@ -1,8 +1,14 @@
 package com.elctrovotesuperx.view.VoterView;
 
+import com.elctrovotesuperx.config.SessionManager;
+import com.elctrovotesuperx.dao.AdminDAO.CandidateDAO;
+import com.elctrovotesuperx.model.AdminModel.Candidate;
+
+import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.control.Label;
+import javafx.scene.control.ProgressIndicator;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.Separator;
 import javafx.scene.layout.HBox;
@@ -16,6 +22,7 @@ import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javafx.scene.text.Text;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -26,16 +33,16 @@ public class Notification {
     private static final String BORDER = "#E2E8F0";
     private static final String BLUE = "#1464F4";
     private static final String PURPLE = "#7B4DFF";
+    private static final String GREEN = "#10B981";
+
+    public static VBox createNotificationView(List<Map<String, String>> legacyRecords) {
+        return createNotificationView();
+    }
 
     /**
-     * Dynamically generates the Notification view using data fetched from your
-     * Controller / DAO.
-     * 
-     * @param notificationRecords List of maps containing notification data
-     *                            (orgName, messageTitle, messageBody, timeAgo,
-     *                            themeColor).
+     * Dynamically generates the Notification view using live session and database data.
      */
-    public static VBox createNotificationView(List<Map<String, String>> notificationRecords) {
+    public static VBox createNotificationView() {
         VBox content = new VBox(20);
         content.setPadding(new Insets(25));
         content.setStyle("-fx-background-color: linear-gradient(to bottom, #F8FAFC, #EEF2F6);");
@@ -52,7 +59,7 @@ public class Notification {
         title.setFont(Font.font("Arial", FontWeight.BOLD, 24));
 
         Text subtitle = new Text(
-                "Stay updated with announcements, ballot schedules, and administrative updates from your organizations.");
+                "Stay updated with announcements, ballot schedules, and administrative candidate reviews from your organizations.");
         subtitle.setFill(Color.web(SECONDARY));
         subtitle.setFont(Font.font(13));
         subtitle.setWrappingWidth(900);
@@ -61,25 +68,82 @@ public class Notification {
         // Notifications List Container
         VBox notificationsList = new VBox(16);
 
-        // Dynamically populate cards from DAO/Controller data
-        if (notificationRecords != null && !notificationRecords.isEmpty()) {
-            for (Map<String, String> notif : notificationRecords) {
-                String orgName = notif.getOrDefault("orgName", "System Notification");
-                String messageTitle = notif.getOrDefault("messageTitle", "Update");
-                String messageBody = notif.getOrDefault("messageBody", "No content available.");
-                String timeAgo = notif.getOrDefault("timeAgo", "Just now");
-                String themeColor = notif.getOrDefault("themeColor", PURPLE);
+        VBox loadingBox = new VBox(10);
+        loadingBox.setAlignment(Pos.CENTER);
+        loadingBox.setPadding(new Insets(20));
+        loadingBox.getChildren().addAll(new ProgressIndicator(), new Label("Checking for notifications..."));
+        notificationsList.getChildren().add(loadingBox);
 
-                notificationsList.getChildren()
-                        .add(createNotificationCard(orgName, messageTitle, messageBody, timeAgo, themeColor));
-            }
-        } else {
-            // Fallback view if no notifications exist
-            Text emptyText = new Text("No new notifications available.");
-            emptyText.setFill(Color.web(SECONDARY));
-            emptyText.setFont(Font.font(13));
-            notificationsList.getChildren().add(emptyText);
-        }
+        Thread t = new Thread(() -> {
+            String org = SessionManager.organizationName != null && !SessionManager.organizationName.isBlank()
+                    ? SessionManager.organizationName : "Organization";
+            String voterName = SessionManager.voterName != null ? SessionManager.voterName : "Voter";
+            String voterEmail = SessionManager.voterEmail != null ? SessionManager.voterEmail.trim().toLowerCase() : "";
+
+            List<VBox> cards = new ArrayList<>();
+
+            // 1. Account verified notice
+            cards.add(createNotificationCard(
+                    org,
+                    "Voter Enrollment Verified",
+                    "Welcome, " + voterName + "! Your eligibility to cast ballots in " + org + " has been verified. You may access all active elections and ballot portals.",
+                    "Active",
+                    GREEN
+            ));
+
+            // 2. Query candidate filings status
+            try {
+                if (SessionManager.joinCode != null) {
+                    List<Candidate> candidates = CandidateDAO.getCandidatesByOrg(SessionManager.joinCode, SessionManager.idToken);
+                    for (Candidate c : candidates) {
+                        boolean match = (c.getEmail() != null && c.getEmail().trim().equalsIgnoreCase(voterEmail)) ||
+                                (c.getName() != null && c.getName().trim().equalsIgnoreCase(voterName));
+                        if (match) {
+                            String status = c.getStatus() != null ? c.getStatus().toUpperCase() : "PENDING";
+                            if ("ACCEPTED".equals(status)) {
+                                cards.add(createNotificationCard(
+                                        org,
+                                        "Candidate Nomination Approved 🎉",
+                                        "Congratulations! Your candidate nomination for '" + c.getPosition() + "' has been approved by the election administrator and added to the official ballot.",
+                                        "Official",
+                                        PURPLE
+                                ));
+                            } else if ("REJECTED".equals(status)) {
+                                cards.add(createNotificationCard(
+                                        org,
+                                        "Candidate Nomination Status Update",
+                                        "Your candidate application for '" + c.getPosition() + "' was reviewed and declined by the election committee.",
+                                        "Notice",
+                                        "#EF4444"
+                                ));
+                            } else {
+                                cards.add(createNotificationCard(
+                                        org,
+                                        "Candidate Application Under Review",
+                                        "Your candidate filing for '" + c.getPosition() + "' is currently pending review by the election administrator.",
+                                        "Pending",
+                                        BLUE
+                                ));
+                            }
+                        }
+                    }
+                }
+            } catch (Exception ignored) {}
+
+            Platform.runLater(() -> {
+                notificationsList.getChildren().clear();
+                if (cards.isEmpty()) {
+                    Text emptyText = new Text("No new notifications available.");
+                    emptyText.setFill(Color.web(SECONDARY));
+                    emptyText.setFont(Font.font(13));
+                    notificationsList.getChildren().add(emptyText);
+                } else {
+                    notificationsList.getChildren().addAll(cards);
+                }
+            });
+        });
+        t.setDaemon(true);
+        t.start();
 
         content.getChildren().addAll(heading, new Separator(), notificationsList);
 
@@ -104,7 +168,7 @@ public class Notification {
 
         Circle avatarCircle = new Circle(20);
         avatarCircle.setFill(Color.web(themeColor));
-        Text avatarInitial = new Text(!orgName.isEmpty() ? orgName.substring(0, 1) : "N");
+        Text avatarInitial = new Text(!orgName.isEmpty() ? orgName.substring(0, 1).toUpperCase() : "N");
         avatarInitial.setFill(Color.WHITE);
         avatarInitial.setFont(Font.font("Arial", FontWeight.BOLD, 13));
         StackPane avatarPane = new StackPane(avatarCircle, avatarInitial);
@@ -144,4 +208,4 @@ public class Notification {
         card.getChildren().addAll(topRow, new Separator(), bodyText);
         return card;
     }
-}
+}

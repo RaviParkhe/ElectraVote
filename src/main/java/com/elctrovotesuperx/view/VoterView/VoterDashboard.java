@@ -1,6 +1,11 @@
 package com.elctrovotesuperx.view.VoterView;
 
+import com.elctrovotesuperx.config.SessionManager;
+import com.elctrovotesuperx.dao.AdminDAO.ElectionDAO;
+import com.elctrovotesuperx.model.AdminModel.ElectionData;
+
 import javafx.application.Application;
+import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
@@ -20,6 +25,8 @@ import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javafx.scene.text.Text;
 import javafx.stage.Stage;
+
+import java.util.List;
 
 public class VoterDashboard extends Application {
 
@@ -121,11 +128,18 @@ public class VoterDashboard extends Application {
         StackPane orgAvatar = new StackPane(orgCircle, orgIcon);
         VBox orgText = new VBox(2);
 
-        sidebarOrgNameText = new Text("ABC College - Student Union 2026");
+        String currentOrg = SessionManager.organizationName != null && !SessionManager.organizationName.isBlank()
+                ? SessionManager.organizationName
+                : "Active Organization";
+        sidebarOrgNameText = new Text(currentOrg);
         sidebarOrgNameText.setFill(Color.WHITE);
         sidebarOrgNameText.setFont(Font.font("Arial", FontWeight.BOLD, 12.5));
 
-        sidebarRoleText = new Text("Alex Morgan (Eligible Voter)");
+        String voterName = SessionManager.voterName != null && !SessionManager.voterName.isBlank()
+                ? SessionManager.voterName
+                : "Eligible Voter";
+        String voterStatus = SessionManager.voterStatus != null ? SessionManager.voterStatus : "Eligible Voter";
+        sidebarRoleText = new Text(voterName + " (" + voterStatus + ")");
         sidebarRoleText.setFill(Color.web("#A9BCD3"));
         sidebarRoleText.setFont(Font.font(10.5));
 
@@ -141,11 +155,12 @@ public class VoterDashboard extends Application {
         homeBtnRef = createMenuButton("⌂", "Home", true);
         Button activeElecBtn = createMenuButton("▣", "Active Elections", false);
         Button voteBtn = createMenuButton("🗳", "Vote", false);
+        Button applyCandBtn = createMenuButton("✍", "Apply as Candidate", false);
+        Button appBtn = createMenuButton("📄", "My Applications", false);
         Button historyBtn = createMenuButton("◷", "Voting History", false);
         Button orgBtn = createMenuButton("🏢", "My Organization", false);
         Button joinOrgBtn = createMenuButton("＋", "Join Organization", false);
-        Button notifBtn = createMenuButton("🔔", "Notification", false);
-        Button appBtn = createMenuButton("📄", "My Application", false);
+        Button notifBtn = createMenuButton("🔔", "Notifications", false);
 
         homeBtnRef.setOnAction(e -> {
             setActiveMenu(menu, homeBtnRef);
@@ -162,22 +177,14 @@ public class VoterDashboard extends Application {
             showPage(Vote.createOrganizationSelectionView());
         });
 
-        orgBtn.setOnAction(e -> {
-            setActiveMenu(menu, orgBtn);
-            java.util.List<java.util.Map<String, String>> mockOrgList = new java.util.ArrayList<>();
-            showPage(MyOrganization.createMyOrganizationView(mockOrgList));
+        applyCandBtn.setOnAction(e -> {
+            setActiveMenu(menu, applyCandBtn);
+            showPage(ApplyCandidateView.createApplyCandidateView(null));
         });
 
-        // Inside your VoterDashboard.java or Controller action handler:
-        notifBtn.setOnAction(e -> {
-            setActiveMenu(menu, notifBtn);
-            // Fetch notifications dynamically from your DAO/Controller:
-            // List<Map<String, String>> notifList =
-            // notificationDAO.getNotificationsForVoter(voterId);
-            java.util.List<java.util.Map<String, String>> mockNotifList = new java.util.ArrayList<>();
-            // Add mock or DAO records...
-            showPage(Notification.createNotificationView(mockNotifList));
-
+        appBtn.setOnAction(e -> {
+            setActiveMenu(menu, appBtn);
+            showPage(MyApplication.createMyApplicationView());
         });
 
         historyBtn.setOnAction(e -> {
@@ -185,35 +192,28 @@ public class VoterDashboard extends Application {
             showPage(VotingHistory.createVotingHistoryView());
         });
 
+        orgBtn.setOnAction(e -> {
+            setActiveMenu(menu, orgBtn);
+            showPage(MyOrganization.createMyOrganizationView());
+        });
+
         joinOrgBtn.setOnAction(e -> {
             setActiveMenu(menu, joinOrgBtn);
             showPage(JoinOrganization.createJoinOrganizationView());
         });
 
-        appBtn.setOnAction(e -> {
-            setActiveMenu(menu, appBtn);
-
-            // Fetch approved applications dynamically from your DAO/Controller:
-            // List<Map<String, String>> approvedApps =
-            // applicationDAO.getApprovedApplicationsForVoter(voterId);
-
-            java.util.List<java.util.Map<String, String>> mockApprovedApps = new java.util.ArrayList<>();
-            // Example record (will only display if approved by admin):
-            /*
-             * java.util.Map<String, String> sample = new java.util.HashMap<>();
-             * sample.put("orgName", "ABC College - Student Union 2026");
-             * sample.put("position", "President Candidate");
-             * sample.put("submittedDate", "February 10, 2026");
-             * sample.put("approvalDate", "February 14, 2026");
-             * sample.put("themeColor", "#7B4DFF");
-             * mockApprovedApps.add(sample);
-             */
-
-            showPage(MyApplication.createMyApplicationView(mockApprovedApps));
-
+        Button quickPollBtn = createMenuButton("📊", "Quick Polls", false);
+        quickPollBtn.setOnAction(e -> {
+            com.elctrovotesuperx.view.QuickPollView.QuickPoll qp = new com.elctrovotesuperx.view.QuickPollView.QuickPoll();
+            Scene prevScene = VoterDashboardStage.getScene();
+            VoterDashboardStage.setScene(qp.getScene(() -> {
+                VoterDashboardStage.setScene(prevScene);
+                VoterDashboardStage.setMaximized(true);
+            }));
+            VoterDashboardStage.setMaximized(true);
         });
 
-        menu.getChildren().addAll(homeBtnRef, activeElecBtn, voteBtn, historyBtn, orgBtn, joinOrgBtn, notifBtn, appBtn);
+        menu.getChildren().addAll(homeBtnRef, activeElecBtn, voteBtn, applyCandBtn, appBtn, historyBtn, orgBtn, joinOrgBtn, notifBtn, quickPollBtn);
 
         Region spacer = new Region();
         VBox.setVgrow(spacer, Priority.ALWAYS);
@@ -224,7 +224,17 @@ public class VoterDashboard extends Application {
         Button logout = createMenuButton("⇥", "Logout", false);
         logout.setOnAction(e -> {
             System.out.println("Voter logging out...");
-            VoterDashboardStage.close();
+            com.elctrovotesuperx.config.SessionManager.clearSession();
+            Stage currentStage = VoterDashboardStage != null ? VoterDashboardStage : com.electrovotesuperx.utils.Navigation.getStage();
+            com.elctrovotesuperx.view.HomePageView.HomePage home = new com.elctrovotesuperx.view.HomePageView.HomePage(currentStage);
+            Scene homeScene = home.getScene(() -> {
+                if (currentStage != null) currentStage.close();
+            });
+            if (currentStage != null) {
+                currentStage.setScene(homeScene);
+                currentStage.setMaximized(true);
+                currentStage.show();
+            }
         });
 
         sidebar.getChildren().addAll(logoBox, separator, organization, menu, spacer, bottomSeparator, logout);
@@ -330,23 +340,28 @@ public class VoterDashboard extends Application {
         scrollPane.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
         scrollPane.setStyle("-fx-background-color: transparent; -fx-background: transparent;");
 
+        String voterName = SessionManager.voterName != null && !SessionManager.voterName.isBlank()
+                ? SessionManager.voterName : "Voter";
+        String voterStatus = SessionManager.voterStatus != null ? SessionManager.voterStatus : "Verified";
+        String orgName = SessionManager.organizationName != null && !SessionManager.organizationName.isBlank()
+                ? SessionManager.organizationName : "Active Organization";
+
         VBox heading = new VBox(4);
-        homeWelcomeTitleText = new Text("Welcome back, Alex! 👋");
+        homeWelcomeTitleText = new Text("Welcome back, " + voterName + "! 👋");
         homeWelcomeTitleText.setFill(Color.web("#172033"));
         homeWelcomeTitleText.setFont(Font.font("Arial", FontWeight.BOLD, 22));
 
-        Text subtitle = new Text("Here is a quick summary of your voter account status and system updates.");
+        Text subtitle = new Text("Here is a quick summary of your voter account status, live elections, and ballot readiness.");
         subtitle.setFill(Color.web("#6B7280"));
         subtitle.setFont(Font.font(12.5));
         heading.getChildren().addAll(homeWelcomeTitleText, subtitle);
 
-        // Initial stat references
-        if (statValue1 == null)
-            statValue1 = new Text("Verified");
-        if (statValue2 == null)
-            statValue2 = new Text("2");
-        if (statValue3 == null)
-            statValue3 = new Text("ABC College - Student Union 2026");
+        if (statValue1 == null) statValue1 = new Text(voterStatus);
+        else statValue1.setText(voterStatus);
+
+        if (statValue2 == null) statValue2 = new Text("...");
+        if (statValue3 == null) statValue3 = new Text(orgName);
+        else statValue3.setText(orgName);
 
         HBox statsRow = new HBox(15);
         statsRow.getChildren().addAll(
@@ -354,18 +369,36 @@ public class VoterDashboard extends Application {
                 createCustomStatCard("Active Ballots", statValue2, "Pending ballots", "#1464F4"),
                 createCustomStatCard("Current Membership", statValue3, "Active Context", "#7B4DFF"));
 
+        // Fetch real active ballots count from Firestore
+        Thread t = new Thread(() -> {
+            try {
+                if (SessionManager.joinCode != null && !SessionManager.joinCode.isBlank()) {
+                    List<ElectionData> elecs = ElectionDAO.getElectionsByOrg(SessionManager.joinCode, SessionManager.idToken);
+                    Platform.runLater(() -> {
+                        if (statValue2 != null) statValue2.setText(String.valueOf(elecs.size()));
+                    });
+                } else {
+                    Platform.runLater(() -> {
+                        if (statValue2 != null) statValue2.setText("0");
+                    });
+                }
+            } catch (Exception ignored) {}
+        });
+        t.setDaemon(true);
+        t.start();
+
         VBox banner = new VBox(8);
         banner.setPadding(new Insets(16));
         banner.setStyle(
                 "-fx-background-color: linear-gradient(to right, #08264A, #0D3565);" +
                         "-fx-background-radius: 10;");
 
-        Text bannerTitle = new Text("Portal Guidelines & Security Notice");
+        Text bannerTitle = new Text("Portal Guidelines & Cryptographic Security");
         bannerTitle.setFill(Color.WHITE);
         bannerTitle.setFont(Font.font("Arial", FontWeight.BOLD, 16));
 
         Text bannerDesc = new Text(
-                "ElectraVote utilizes client-side zero-knowledge proofs. Your cryptographic receipts ensure your identity is verified while keeping your vote selections entirely private. Check the 'Active Elections' or 'Vote' tabs to participate in ongoing sessions.");
+                "ElectraVote utilizes client-side zero-knowledge proofs and homomorphic encryption. Your cryptographic receipts ensure your eligibility is verified while keeping your vote selections private. Check the 'Active Elections' or 'Vote' tabs to participate in ongoing sessions.");
         bannerDesc.setFill(Color.web("#E2E8F0"));
         bannerDesc.setFont(Font.font(12));
         bannerDesc.setWrappingWidth(900);
@@ -419,10 +452,6 @@ public class VoterDashboard extends Application {
             statValue3.setText(organizationName);
     }
 
-    /**
-     * Updates the active organization in the sidebar header and reflects
-     * organization-specific metrics on the home cards.
-     */
     public static void updateActiveOrganization(String orgName, String status, String activeBallotsCount) {
         if (sidebarOrgNameText != null) {
             sidebarOrgNameText.setText(orgName);
@@ -449,4 +478,4 @@ public class VoterDashboard extends Application {
             dashboardCenter.setCenter(page);
         }
     }
-}
+}

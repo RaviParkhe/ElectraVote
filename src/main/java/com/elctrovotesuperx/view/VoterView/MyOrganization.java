@@ -1,15 +1,18 @@
 package com.elctrovotesuperx.view.VoterView;
 
+import com.elctrovotesuperx.config.SessionManager;
+import com.elctrovotesuperx.dao.AdminDAO.ElectionDAO;
+import com.elctrovotesuperx.model.AdminModel.ElectionData;
+
+import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.control.Button;
+import javafx.scene.control.Label;
+import javafx.scene.control.ProgressIndicator;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.Separator;
-import javafx.scene.layout.HBox;
-import javafx.scene.layout.Priority;
-import javafx.scene.layout.Region;
-import javafx.scene.layout.StackPane;
-import javafx.scene.layout.VBox;
+import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Circle;
 import javafx.scene.text.Font;
@@ -17,7 +20,7 @@ import javafx.scene.text.FontWeight;
 import javafx.scene.text.Text;
 
 import java.util.List;
-import java.util.Map; // Import for data structures coming from your DAO/Controller
+import java.util.Map;
 
 public class MyOrganization {
 
@@ -28,14 +31,14 @@ public class MyOrganization {
     private static final String PURPLE = "#7B4DFF";
     private static final String BLUE = "#1464F4";
 
+    public static VBox createMyOrganizationView(List<Map<String, String>> legacyRecords) {
+        return createMyOrganizationView();
+    }
+
     /**
-     * Dynamically generates the My Organizations view using data fetched from your
-     * Controller / DAO.
-     * 
-     * @param organizationRecords List of maps or custom Organization model objects
-     *                            containing database data.
+     * Dynamically generates the My Organizations view using live SessionManager and Firestore data.
      */
-    public static VBox createMyOrganizationView(List<Map<String, String>> organizationRecords) {
+    public static VBox createMyOrganizationView() {
         VBox content = new VBox(20);
         content.setPadding(new Insets(25));
         content.setStyle("-fx-background-color: linear-gradient(to bottom, #F8FAFC, #EEF2F6);");
@@ -51,7 +54,7 @@ public class MyOrganization {
         title.setFont(Font.font("Arial", FontWeight.BOLD, 24));
 
         Text subtitle = new Text(
-                "Manage your institutional memberships and switch your active voter portal context between organizations.");
+                "Manage your institutional memberships and inspect active organization details and elections.");
         subtitle.setFill(Color.web(SECONDARY));
         subtitle.setFont(Font.font(13));
         subtitle.setWrappingWidth(900);
@@ -59,26 +62,36 @@ public class MyOrganization {
 
         VBox orgsList = new VBox(16);
 
-        // Dynamically loop through records provided by the Controller / DAO
-        if (organizationRecords != null && !organizationRecords.isEmpty()) {
-            for (Map<String, String> org : organizationRecords) {
-                String orgName = org.getOrDefault("orgName", "Unknown Organization");
-                String roleMeta = org.getOrDefault("roleMeta", "Member");
-                String details = org.getOrDefault("details", "No details available");
-                String themeColor = org.getOrDefault("themeColor", PURPLE);
-                String status = org.getOrDefault("status", "Verified");
-                String electionsCount = org.getOrDefault("electionsCount", "0");
+        String orgName = SessionManager.organizationName != null && !SessionManager.organizationName.isBlank()
+                ? SessionManager.organizationName
+                : "Registered Organization";
+        String joinCode = SessionManager.joinCode != null ? SessionManager.joinCode : "N/A";
+        String status = SessionManager.voterStatus != null ? SessionManager.voterStatus : "Verified Voter";
 
-                orgsList.getChildren()
-                        .add(createOrgCard(orgName, roleMeta, details, themeColor, status, electionsCount));
-            }
-        } else {
-            // Fallback view if no records are found
-            Text emptyText = new Text("No organizations found. Join an organization using a join code.");
-            emptyText.setFill(Color.web(SECONDARY));
-            emptyText.setFont(Font.font(13));
-            orgsList.getChildren().add(emptyText);
-        }
+        VBox loadingBox = new VBox(10);
+        loadingBox.setAlignment(Pos.CENTER);
+        loadingBox.setPadding(new Insets(20));
+        loadingBox.getChildren().addAll(new ProgressIndicator(), new Label("Connecting to organization..."));
+        orgsList.getChildren().add(loadingBox);
+
+        Thread t = new Thread(() -> {
+            int electionCount = 0;
+            try {
+                if (SessionManager.joinCode != null) {
+                    List<ElectionData> elecs = ElectionDAO.getElectionsByOrg(SessionManager.joinCode, SessionManager.idToken);
+                    electionCount = elecs.size();
+                }
+            } catch (Exception ignored) {}
+
+            int finalCount = electionCount;
+            Platform.runLater(() -> {
+                orgsList.getChildren().clear();
+                String details = "Join Code: " + joinCode + " • " + finalCount + " Active Election(s)";
+                orgsList.getChildren().add(createOrgCard(orgName, "Institutional Member (" + status + ")", details, PURPLE, status, String.valueOf(finalCount)));
+            });
+        });
+        t.setDaemon(true);
+        t.start();
 
         content.getChildren().addAll(heading, new Separator(), orgsList);
 
@@ -103,7 +116,7 @@ public class MyOrganization {
 
         Circle avatarCircle = new Circle(22);
         avatarCircle.setFill(Color.web(themeColor));
-        Text avatarInitial = new Text(!orgName.isEmpty() ? orgName.substring(0, 1) : "O");
+        Text avatarInitial = new Text(!orgName.isEmpty() ? orgName.substring(0, 1).toUpperCase() : "O");
         avatarInitial.setFill(Color.WHITE);
         avatarInitial.setFont(Font.font("Arial", FontWeight.BOLD, 14));
         StackPane avatarPane = new StackPane(avatarCircle, avatarInitial);
@@ -122,25 +135,16 @@ public class MyOrganization {
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
 
-        Button switchOrgBtn = new Button("Switch to Organization 🔄");
-        switchOrgBtn.setStyle(
-                "-fx-background-color: linear-gradient(to right, #1464F4, #0D3565);" +
-                        "-fx-text-fill: white;" +
+        Label statusBadge = new Label("Active Context ✓");
+        statusBadge.setStyle(
+                "-fx-background-color: #ECFDF5;" +
+                        "-fx-text-fill: #059669;" +
+                        "-fx-font-size: 11.5px;" +
                         "-fx-font-weight: bold;" +
-                        "-fx-padding: 8 16;" +
-                        "-fx-background-radius: 7;" +
-                        "-fx-cursor: hand;" +
-                        "-fx-font-size: 12px;");
+                        "-fx-padding: 6 12;" +
+                        "-fx-background-radius: 12;");
 
-        // Triggers context switch and updates dashboard metrics dynamically
-        switchOrgBtn.setOnAction(e -> {
-            VoterDashboard.updateActiveOrganization(orgName, status, electionsCount);
-        });
-
-        HBox actionBox = new HBox(10, switchOrgBtn);
-        actionBox.setAlignment(Pos.CENTER_RIGHT);
-
-        topRow.getChildren().addAll(avatarPane, textBox, spacer, actionBox);
+        topRow.getChildren().addAll(avatarPane, textBox, spacer, statusBadge);
 
         HBox detailsRow = new HBox(10);
         detailsRow.setAlignment(Pos.CENTER_LEFT);
@@ -154,4 +158,4 @@ public class MyOrganization {
         card.getChildren().addAll(topRow, new Separator(), detailsRow);
         return card;
     }
-}
+}

@@ -8,6 +8,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
+import com.elctrovotesuperx.config.SessionManager;
+import com.elctrovotesuperx.config.firebaseConfig.FirebaseDatabaseService;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+
 import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -253,13 +258,46 @@ public class VotersPage extends VBox {
     private void fetchVotersFromFirebase() {
         loadingSpinner.setVisible(true);
 
-        CompletableFuture.supplyAsync(() -> {
-            try {
-                Thread.sleep(500);
-            } catch (InterruptedException ignored) {
-            }
+        String joinCode = SessionManager.joinCode != null && !SessionManager.joinCode.isBlank()
+                ? SessionManager.joinCode
+                : currentOrganizationId;
+        String idToken = SessionManager.idToken;
 
-            return getInitialFallbackData();
+        CompletableFuture.supplyAsync(() -> {
+            List<VoterModel> fetchedList = new ArrayList<>();
+            try {
+                JsonObject membersJson = FirebaseDatabaseService.getAllMembers(joinCode, idToken);
+                if (membersJson != null) {
+                    for (Map.Entry<String, JsonElement> entry : membersJson.entrySet()) {
+                        String uid = entry.getKey();
+                        if (entry.getValue().isJsonObject()) {
+                            JsonObject m = entry.getValue().getAsJsonObject();
+                            String role = m.has("role") && !m.get("role").isJsonNull() ? m.get("role").getAsString() : "VOTER";
+                            if ("VOTER".equalsIgnoreCase(role)) {
+                                String name = m.has("name") && !m.get("name").isJsonNull() ? m.get("name").getAsString()
+                                        : (m.has("fullName") && !m.get("fullName").isJsonNull() ? m.get("fullName").getAsString() : "Unknown");
+                                String email = m.has("email") && !m.get("email").isJsonNull() ? m.get("email").getAsString() : "";
+                                String phone = m.has("phone") && !m.get("phone").isJsonNull() ? m.get("phone").getAsString() : "N/A";
+                                String voterId = m.has("voterId") && !m.get("voterId").isJsonNull() ? m.get("voterId").getAsString()
+                                        : ("VOT" + String.format("%03d", Math.abs(uid.hashCode() % 900) + 100));
+                                String category = m.has("category") && !m.get("category").isJsonNull() ? m.get("category").getAsString() : "Student";
+                                String department = m.has("department") && !m.get("department").isJsonNull() ? m.get("department").getAsString() : "General";
+                                String yearOrRole = m.has("yearOrRole") && !m.get("yearOrRole").isJsonNull() ? m.get("yearOrRole").getAsString() : "Member";
+                                String status = m.has("status") && !m.get("status").isJsonNull() ? m.get("status").getAsString() : "PENDING";
+                                String date = m.has("date") && !m.get("date").isJsonNull() ? m.get("date").getAsString()
+                                        : LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd MMM yyyy"));
+
+                                fetchedList.add(new VoterModel(
+                                        uid, voterId, name, email, phone, category, department, yearOrRole, date, status
+                                ));
+                            }
+                        }
+                    }
+                }
+            } catch (Exception ex) {
+                ex.printStackTrace();
+            }
+            return fetchedList;
         }).thenAccept(fetchedList -> Platform.runLater(() -> {
             voters.clear();
             voters.addAll(fetchedList);
@@ -278,13 +316,24 @@ public class VotersPage extends VBox {
     private void updateVoterStatusInFirebase(VoterModel voter, String newStatus) {
         loadingSpinner.setVisible(true);
 
+        String joinCode = SessionManager.joinCode != null && !SessionManager.joinCode.isBlank()
+                ? SessionManager.joinCode
+                : currentOrganizationId;
+        String idToken = SessionManager.idToken;
+
         CompletableFuture.runAsync(() -> {
             try {
-                Thread.sleep(300);
-            } catch (InterruptedException ignored) {
+                boolean updated = FirebaseDatabaseService.updateMemberStatus(
+                        joinCode, voter.documentId, newStatus, idToken
+                );
+                if (updated) {
+                    voter.status = newStatus;
+                } else {
+                    throw new RuntimeException("Failed to update status in Firebase.");
+                }
+            } catch (Exception ex) {
+                throw new RuntimeException(ex);
             }
-
-            voter.status = newStatus;
         }).thenRun(() -> Platform.runLater(() -> {
             loadingSpinner.setVisible(false);
             refreshRequests();
@@ -579,6 +628,9 @@ public class VotersPage extends VBox {
         Dialog<ButtonType> confirmation = new Dialog<>();
         if (AdminDashboard.AdminDashboardStage != null) {
             confirmation.initOwner(AdminDashboard.AdminDashboardStage);
+            confirmation.initModality(javafx.stage.Modality.WINDOW_MODAL);
+        } else {
+            com.electrovotesuperx.utils.Navigation.attachOwner(confirmation);
         }
         confirmation.setTitle("Approve Voter Request");
 
@@ -630,6 +682,9 @@ public class VotersPage extends VBox {
         Dialog<ButtonType> confirmation = new Dialog<>();
         if (AdminDashboard.AdminDashboardStage != null) {
             confirmation.initOwner(AdminDashboard.AdminDashboardStage);
+            confirmation.initModality(javafx.stage.Modality.WINDOW_MODAL);
+        } else {
+            com.electrovotesuperx.utils.Navigation.attachOwner(confirmation);
         }
         confirmation.setTitle("Reject Voter Request");
 
@@ -696,6 +751,9 @@ public class VotersPage extends VBox {
         Dialog<ButtonType> dialog = new Dialog<>();
         if (AdminDashboard.AdminDashboardStage != null) {
             dialog.initOwner(AdminDashboard.AdminDashboardStage);
+            dialog.initModality(javafx.stage.Modality.WINDOW_MODAL);
+        } else {
+            com.electrovotesuperx.utils.Navigation.attachOwner(dialog);
         }
         dialog.setTitle(title);
 
@@ -741,6 +799,12 @@ public class VotersPage extends VBox {
 
     private void showBaseAlert(String title, String message) {
         Alert alert = new Alert(Alert.AlertType.INFORMATION);
+        if (AdminDashboard.AdminDashboardStage != null) {
+            alert.initOwner(AdminDashboard.AdminDashboardStage);
+            alert.initModality(javafx.stage.Modality.WINDOW_MODAL);
+        } else {
+            com.electrovotesuperx.utils.Navigation.attachOwner(alert);
+        }
         alert.setTitle(title);
         alert.setHeaderText(null);
         alert.setContentText(message);

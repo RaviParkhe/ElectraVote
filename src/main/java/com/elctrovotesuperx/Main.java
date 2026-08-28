@@ -1,8 +1,5 @@
 package com.elctrovotesuperx;
 
-<<<<<<< HEAD
-public class Main {
-=======
 import com.elctrovotesuperx.view.LoginPageView.Login;
 
 import javafx.application.Application;
@@ -17,9 +14,11 @@ public class Main extends Application {
     public void start(Stage stage) {
 
         com.elctrovotesuperx.config.FirebaseConfig.initFirebase();
+        com.electrovotesuperx.config.DatabaseConfig.initializeDatabase();
 
         // Only ONE Stage
         Login.loginStage = stage;
+        com.electrovotesuperx.utils.Navigation.init(stage);
 
         Login login = new Login();
 
@@ -40,8 +39,7 @@ public class Main extends Application {
         stage.setMaximized(true);
     }
 
->>>>>>> origin/Ravikumar
     public static void main(String[] args) {
-        System.out.println("Hello world!");
+        launch(args);
     }
 }

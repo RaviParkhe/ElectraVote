@@ -1,6 +1,8 @@
 package com.elctrovotesuperx.controller.OrganizationController;
 
 import com.elctrovotesuperx.dao.OrganizationDAO.VoterDAO;
+import com.elctrovotesuperx.exception.AuthenticationException;
+import com.elctrovotesuperx.exception.FirestoreException;
 
 /**
  * VoterController handles validation and business logic
@@ -36,8 +38,10 @@ public class VoterController {
 
         try {
             return dao.signIn(email.trim(), password, joinCode.trim().toUpperCase());
+        } catch (AuthenticationException | FirestoreException e) {
+            return VoterDAO.SignInResult.failure(
+                    "Sign in failed. Please check your connection and try again.");
         } catch (Exception e) {
-            e.printStackTrace();
             return VoterDAO.SignInResult.failure(
                     "Sign in failed: " + (e.getMessage() != null ? e.getMessage() : "Unknown error"));
         }
@@ -52,6 +56,10 @@ public class VoterController {
             String fullName,
             String email,
             String password,
+            String phone,
+            String category,
+            String department,
+            String yearOrRole,
             String joinCode) {
 
         // Validate inputs
@@ -80,10 +88,23 @@ public class VoterController {
                     fullName.trim(),
                     email.trim(),
                     password,
+                    phone != null ? phone.trim() : "",
+                    category != null && !category.isBlank() ? category.trim() : "Student",
+                    department != null && !department.isBlank() ? department.trim() : "General",
+                    yearOrRole != null && !yearOrRole.isBlank() ? yearOrRole.trim() : "Member",
                     joinCode.trim().toUpperCase());
+        } catch (AuthenticationException | FirestoreException e) {
+            return "Registration failed. Please check your connection and try again.";
         } catch (Exception e) {
-            e.printStackTrace();
             return "Registration failed: " + (e.getMessage() != null ? e.getMessage() : "Unknown error");
         }
+    }
+
+    public static String signUp(
+            String fullName,
+            String email,
+            String password,
+            String joinCode) {
+        return signUp(fullName, email, password, "", "Student", "General", "Member", joinCode);
     }
 }

@@ -1,5 +1,7 @@
 package com.elctrovotesuperx.model.AdminModel;
 
+import javafx.scene.control.Label;
+
 public class AdminDash {
 
     int electionValue;
@@ -7,11 +9,11 @@ public class AdminDash {
     int votesValue;
     double turnoutValue;
 
-    AdminDash(int electionValue, int voterValue, int votesValue, double turnoutValue) {
+    AdminDash(int electionValue,int voterValue,int votesValue,double turnoutValue){
         this.electionValue = electionValue;
         this.voterValue = voterValue;
         this.votesValue = votesValue;
-        this.turnoutValue = turnoutValue;
+        this.turnoutValue= turnoutValue;
     }
 
     public int getElectionValue() {
@@ -45,5 +47,6 @@ public class AdminDash {
     public void setTurnoutValue(double turnoutValue) {
         this.turnoutValue = turnoutValue;
     }
-
+    
+    
 }

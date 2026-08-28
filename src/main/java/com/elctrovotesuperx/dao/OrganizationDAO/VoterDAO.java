@@ -25,19 +25,25 @@ public class VoterDAO {
         private final boolean success;
         private final String message;
         private final Voter voter;
+        private final String idToken;
 
-        private SignInResult(boolean success, String message, Voter voter) {
+        private SignInResult(boolean success, String message, Voter voter, String idToken) {
             this.success = success;
             this.message = message;
             this.voter = voter;
+            this.idToken = idToken;
         }
 
         public static SignInResult success(Voter voter) {
-            return new SignInResult(true, null, voter);
+            return new SignInResult(true, null, voter, null);
+        }
+
+        public static SignInResult success(Voter voter, String idToken) {
+            return new SignInResult(true, null, voter, idToken);
         }
 
         public static SignInResult failure(String message) {
-            return new SignInResult(false, message, null);
+            return new SignInResult(false, message, null, null);
         }
 
         public boolean isSuccess() {
@@ -50,6 +56,10 @@ public class VoterDAO {
 
         public Voter getVoter() {
             return voter;
+        }
+
+        public String getIdToken() {
+            return idToken;
         }
     }
 
@@ -103,14 +113,31 @@ public class VoterDAO {
                     "Access denied. Please use the Organization Sign-In for admin access.");
         }
 
-        // STEP 5: Build Voter object
+        // STEP 5: Verify status is ACCEPTED
+        String status = member.has("status")
+                ? member.get("status").getAsString()
+                : "PENDING";
+
+        if ("PENDING".equalsIgnoreCase(status)) {
+            return SignInResult.failure(
+                    "Your voter registration is pending approval by the organization administrator. Please wait for verification.");
+        }
+
+        if ("REJECTED".equalsIgnoreCase(status)) {
+            return SignInResult.failure(
+                    "Your voter registration request has been rejected by the administrator.");
+        }
+
+        // STEP 6: Build Voter object
         String orgName = org.has("organizationName")
                 ? org.get("organizationName").getAsString()
                 : joinCode;
 
         String memberName = member.has("name")
                 ? member.get("name").getAsString()
-                : email;
+                : (member.has("fullName") ? member.get("fullName").getAsString() : email);
+
+        String phone = member.has("phone") ? member.get("phone").getAsString() : "";
 
         Voter voter = new Voter();
         voter.setUid(uid);
@@ -119,8 +146,10 @@ public class VoterDAO {
         voter.setJoinCode(joinCode);
         voter.setRole("VOTER");
         voter.setOrganizationName(orgName);
+        voter.setStatus(status);
+        voter.setPhone(phone);
 
-        return SignInResult.success(voter);
+        return SignInResult.success(voter, idToken);
     }
 
     // =========================================================
@@ -128,7 +157,7 @@ public class VoterDAO {
     // Steps:
     //   1. Create Firebase Auth user (get uid + idToken)
     //   2. Verify join code exists in RTDB
-    //   3. Save voter to RTDB as a member with role VOTER
+    //   3. Save voter to RTDB as a member with role VOTER & status PENDING
     // Returns: null on success, error message string on failure
     // =========================================================
 
@@ -136,6 +165,10 @@ public class VoterDAO {
             String fullName,
             String email,
             String password,
+            String phone,
+            String category,
+            String department,
+            String yearOrRole,
             String joinCode) throws Exception {
 
         // STEP 1: Create Firebase Auth user
@@ -156,14 +189,24 @@ public class VoterDAO {
             return "Invalid join code. No organization found with code: " + joinCode;
         }
 
+        String voterId = "VOT" + String.format("%03d", (int)(Math.random() * 900) + 100);
+
         // STEP 3: Save voter membership in RTDB
         boolean saved = FirebaseDatabaseService.saveVoter(
-                joinCode, uid, fullName, email, idToken);
+                joinCode, uid, voterId, fullName, email, phone, category, department, yearOrRole, idToken);
 
         if (!saved) {
             return "Registration failed. Could not save voter data. Please try again.";
         }
 
         return null; // null = success
+    }
+
+    public String signUp(
+            String fullName,
+            String email,
+            String password,
+            String joinCode) throws Exception {
+        return signUp(fullName, email, password, "", "Student", "General", "Member", joinCode);
     }
 }

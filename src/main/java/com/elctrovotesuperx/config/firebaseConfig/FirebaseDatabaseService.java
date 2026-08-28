@@ -337,6 +337,33 @@ return response.statusCode() >= 200 &&
             String idToken)
             throws IOException, InterruptedException {
 
+        return saveVoter(
+                joinCode,
+                uid,
+                "VOT" + String.format("%03d", (int)(Math.random() * 900) + 100),
+                name,
+                email,
+                "",
+                "Student",
+                "General",
+                "Member",
+                idToken
+        );
+    }
+
+    public static boolean saveVoter(
+            String joinCode,
+            String uid,
+            String voterId,
+            String name,
+            String email,
+            String phone,
+            String category,
+            String department,
+            String yearOrRole,
+            String idToken)
+            throws IOException, InterruptedException {
+
         String path =
                 "/organizations/"
                         + encode(joinCode)
@@ -347,8 +374,7 @@ return response.statusCode() >= 200 &&
         String url =
                 FirebaseConfig.DATABASE_URL
                         + path
-                        + "?auth="
-                        + encode(idToken);
+                        + (idToken != null && !idToken.isBlank() ? "?auth=" + encode(idToken) : "");
 
         JsonObject voter =
                 new JsonObject();
@@ -359,7 +385,17 @@ return response.statusCode() >= 200 &&
         );
 
         voter.addProperty(
+                "voterId",
+                voterId != null && !voterId.isBlank() ? voterId : ("VOT" + String.format("%03d", (int)(Math.random() * 900) + 100))
+        );
+
+        voter.addProperty(
                 "name",
+                name
+        );
+
+        voter.addProperty(
+                "fullName",
                 name
         );
 
@@ -369,13 +405,44 @@ return response.statusCode() >= 200 &&
         );
 
         voter.addProperty(
+                "phone",
+                phone != null ? phone : ""
+        );
+
+        voter.addProperty(
+                "category",
+                category != null && !category.isBlank() ? category : "Student"
+        );
+
+        voter.addProperty(
+                "department",
+                department != null && !department.isBlank() ? department : "General"
+        );
+
+        voter.addProperty(
+                "yearOrRole",
+                yearOrRole != null && !yearOrRole.isBlank() ? yearOrRole : "Member"
+        );
+
+        voter.addProperty(
                 "role",
                 "VOTER"
         );
 
         voter.addProperty(
+                "status",
+                "PENDING"
+        );
+
+        voter.addProperty(
                 "joinedAt",
                 System.currentTimeMillis()
+        );
+
+        java.time.format.DateTimeFormatter dtf = java.time.format.DateTimeFormatter.ofPattern("dd MMM yyyy");
+        voter.addProperty(
+                "date",
+                java.time.LocalDateTime.now().format(dtf)
         );
 
         HttpRequest request =
@@ -400,6 +467,260 @@ return response.statusCode() >= 200 &&
 
         return response.statusCode() >= 200
                 && response.statusCode() < 300;
+    }
+
+    // =========================================================
+    // GET ALL MEMBERS
+    // =========================================================
+
+    public static JsonObject getAllMembers(
+            String joinCode,
+            String idToken)
+            throws IOException, InterruptedException {
+
+        String path =
+                "/organizations/"
+                        + encode(joinCode)
+                        + "/members.json";
+
+        String url =
+                FirebaseConfig.DATABASE_URL
+                        + path
+                        + (idToken != null && !idToken.isBlank() ? "?auth=" + encode(idToken) : "");
+
+        HttpRequest request =
+                HttpRequest.newBuilder()
+                        .uri(URI.create(url))
+                        .GET()
+                        .build();
+
+        HttpResponse<String> response =
+                CLIENT.send(
+                        request,
+                        HttpResponse.BodyHandlers.ofString()
+                );
+
+        if (response.statusCode() < 200
+                || response.statusCode() >= 300) {
+
+            return null;
+        }
+
+        if (response.body() == null
+                || response.body().equals("null")) {
+
+            return null;
+        }
+
+        return JsonParser
+                .parseString(response.body())
+                .getAsJsonObject();
+    }
+
+    // =========================================================
+    // UPDATE MEMBER STATUS (PENDING, ACCEPTED, REJECTED)
+    // =========================================================
+
+    public static boolean updateMemberStatus(
+            String joinCode,
+            String uid,
+            String status,
+            String idToken)
+            throws IOException, InterruptedException {
+
+        String path =
+                "/organizations/"
+                        + encode(joinCode)
+                        + "/members/"
+                        + encode(uid)
+                        + "/status.json";
+
+        String url =
+                FirebaseConfig.DATABASE_URL
+                        + path
+                        + (idToken != null && !idToken.isBlank() ? "?auth=" + encode(idToken) : "");
+
+        HttpRequest request =
+                HttpRequest.newBuilder()
+                        .uri(URI.create(url))
+                        .header(
+                                "Content-Type",
+                                "application/json"
+                        )
+                        .PUT(
+                                HttpRequest.BodyPublishers.ofString(
+                                        "\"" + status + "\""
+                                )
+                        )
+                        .build();
+
+        HttpResponse<String> response =
+                CLIENT.send(
+                        request,
+                        HttpResponse.BodyHandlers.ofString()
+                );
+
+        return response.statusCode() >= 200
+                && response.statusCode() < 300;
+    }
+
+    // =========================================================
+    // GET ALL MEMBERS
+    // =========================================================
+
+    public static JsonObject getMembers(
+            String joinCode,
+            String idToken)
+            throws IOException, InterruptedException {
+
+        String path =
+                "/organizations/"
+                        + encode(joinCode)
+                        + "/members.json";
+
+        String url =
+                FirebaseConfig.DATABASE_URL
+                        + path
+                        + (idToken != null && !idToken.isBlank() ? "?auth=" + encode(idToken) : "");
+
+        HttpRequest request =
+                HttpRequest.newBuilder()
+                        .uri(URI.create(url))
+                        .GET()
+                        .build();
+
+        HttpResponse<String> response =
+                CLIENT.send(
+                        request,
+                        HttpResponse.BodyHandlers.ofString()
+                );
+
+        if (response.statusCode() < 200 || response.statusCode() >= 300) {
+            return null;
+        }
+
+        if (response.body() == null || response.body().equals("null")) {
+            return null;
+        }
+
+        return JsonParser
+                .parseString(response.body())
+                .getAsJsonObject();
+    }
+
+    // =========================================================
+    // QUICK POLL CLOUD SERVICES (REALTIME DATABASE)
+    // =========================================================
+
+    public static boolean saveQuickPoll(String pollCode, JsonObject pollData, String idToken) {
+        try {
+            String path = "/quick_polls/" + encode(pollCode) + ".json";
+            String url = FirebaseConfig.DATABASE_URL + path + (idToken != null && !idToken.isBlank() ? "?auth=" + encode(idToken) : "");
+
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(url))
+                    .header("Content-Type", "application/json")
+                    .PUT(HttpRequest.BodyPublishers.ofString(pollData.toString()))
+                    .build();
+
+            HttpResponse<String> response = CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+            return response.statusCode() >= 200 && response.statusCode() < 300;
+        } catch (Exception e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
+
+    public static JsonObject getQuickPolls(String idToken) {
+        try {
+            String path = "/quick_polls.json";
+            String url = FirebaseConfig.DATABASE_URL + path + (idToken != null && !idToken.isBlank() ? "?auth=" + encode(idToken) : "");
+
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(url))
+                    .GET()
+                    .build();
+
+            HttpResponse<String> response = CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() < 200 || response.statusCode() >= 300 || response.body() == null || response.body().equals("null")) {
+                return null;
+            }
+
+            return JsonParser.parseString(response.body()).getAsJsonObject();
+        } catch (Exception e) {
+            e.printStackTrace();
+            return null;
+        }
+    }
+
+    public static JsonObject getQuickPollByCode(String pollCode, String idToken) {
+        try {
+            String path = "/quick_polls/" + encode(pollCode) + ".json";
+            String url = FirebaseConfig.DATABASE_URL + path + (idToken != null && !idToken.isBlank() ? "?auth=" + encode(idToken) : "");
+
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(url))
+                    .GET()
+                    .build();
+
+            HttpResponse<String> response = CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() < 200 || response.statusCode() >= 300 || response.body() == null || response.body().equals("null")) {
+                return null;
+            }
+
+            return JsonParser.parseString(response.body()).getAsJsonObject();
+        } catch (Exception e) {
+            e.printStackTrace();
+            return null;
+        }
+    }
+
+    public static boolean recordQuickPollVote(String pollCode, String voterId, String voterName, String option, String idToken) {
+        try {
+            String authParam = (idToken != null && !idToken.isBlank() ? "?auth=" + encode(idToken) : "");
+
+            // 1. Record voter in voter list (prevents double voting in cloud)
+            String voterPath = "/quick_polls/" + encode(pollCode) + "/voters/" + encode(voterId) + ".json";
+            JsonObject voterRecord = new JsonObject();
+            voterRecord.addProperty("voterName", voterName);
+            voterRecord.addProperty("option", option);
+            voterRecord.addProperty("timestamp", System.currentTimeMillis());
+
+            HttpRequest voterReq = HttpRequest.newBuilder()
+                    .uri(URI.create(FirebaseConfig.DATABASE_URL + voterPath + authParam))
+                    .header("Content-Type", "application/json")
+                    .PUT(HttpRequest.BodyPublishers.ofString(voterRecord.toString()))
+                    .build();
+
+            CLIENT.send(voterReq, HttpResponse.BodyHandlers.ofString());
+
+            // 2. Fetch and increment option vote count
+            String optPath = "/quick_polls/" + encode(pollCode) + "/options/" + encode(option) + ".json";
+            HttpRequest getOptReq = HttpRequest.newBuilder()
+                    .uri(URI.create(FirebaseConfig.DATABASE_URL + optPath + authParam))
+                    .GET()
+                    .build();
+
+            HttpResponse<String> getOptResp = CLIENT.send(getOptReq, HttpResponse.BodyHandlers.ofString());
+            int currentCount = 0;
+            if (getOptResp.body() != null && !getOptResp.body().equals("null")) {
+                try {
+                    currentCount = Integer.parseInt(getOptResp.body().trim());
+                } catch (Exception ignored) {}
+            }
+
+            HttpRequest putOptReq = HttpRequest.newBuilder()
+                    .uri(URI.create(FirebaseConfig.DATABASE_URL + optPath + authParam))
+                    .header("Content-Type", "application/json")
+                    .PUT(HttpRequest.BodyPublishers.ofString(String.valueOf(currentCount + 1)))
+                    .build();
+
+            HttpResponse<String> putResp = CLIENT.send(putOptReq, HttpResponse.BodyHandlers.ofString());
+            return putResp.statusCode() >= 200 && putResp.statusCode() < 300;
+        } catch (Exception e) {
+            e.printStackTrace();
+            return false;
+        }
     }
 
     // =========================================================

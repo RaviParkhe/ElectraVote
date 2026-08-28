@@ -298,6 +298,27 @@ public class AdminDashboard extends Application {
             center.setCenter(resultPage);
         });
 
+        reportsBtn.setOnAction(e -> {
+            setActiveNav(reportsBtn, buttons);
+            center.setCenter(new ReportsPage());
+        });
+
+        settingsBtn.setOnAction(e -> {
+            setActiveNav(settingsBtn, buttons);
+            center.setCenter(new SettingsPage());
+        });
+
+        logoutBtn.setOnAction(e -> {
+            com.elctrovotesuperx.config.SessionManager.clearSession();
+            com.elctrovotesuperx.view.HomePageView.HomePage home = new com.elctrovotesuperx.view.HomePageView.HomePage(stage);
+            Scene homeScene = home.getScene(() -> {
+                stage.close();
+            });
+            stage.setScene(homeScene);
+            stage.setMaximized(true);
+            stage.show();
+        });
+
         Scene scene = new Scene(root);
         AdminDashboardScene = scene;
 
@@ -628,7 +649,10 @@ public class AdminDashboard extends Application {
     // =========================================================================
     private void showTurnoutReportModal(Stage ownerStage) {
         Dialog<ButtonType> dialog = new Dialog<>();
-        dialog.initOwner(ownerStage);
+        if (ownerStage != null) {
+            dialog.initOwner(ownerStage);
+            dialog.initModality(javafx.stage.Modality.WINDOW_MODAL);
+        }
         dialog.setTitle("ElectraVote Official Turnout Audit Report");
 
         VBox modalContent = new VBox(14);

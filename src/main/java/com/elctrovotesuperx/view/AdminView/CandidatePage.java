@@ -1,12 +1,20 @@
 package com.elctrovotesuperx.view.AdminView;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+
+import com.elctrovotesuperx.config.SessionManager;
+import com.elctrovotesuperx.dao.AdminDAO.CandidateDAO;
+import com.elctrovotesuperx.dao.AdminDAO.ElectionDAO;
+import com.elctrovotesuperx.model.AdminModel.Candidate;
+import com.elctrovotesuperx.model.AdminModel.ElectionData;
 
 import javafx.application.Platform;
 import javafx.geometry.Insets;
@@ -15,16 +23,14 @@ import javafx.scene.control.*;
 import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Circle;
-import com.elctrovotesuperx.controller.AdminController.ElectionController;
-import com.elctrovotesuperx.model.AdminModel.ElectionData;
 
 public class CandidatePage extends VBox {
 
     // =========================================================
     // MULTI-TENANCY CONTEXT & DATA STATE
     // =========================================================
-    private final String currentOrganizationId = "ORG_ABC_COLLEGE";
     private final List<CandidateModel> applications = new ArrayList<>();
+    private final List<ElectionData> loadedElections = new ArrayList<>();
 
     private final VBox applicationList = new VBox(10);
     private final VBox approvedList = new VBox(10);
@@ -51,15 +57,12 @@ public class CandidatePage extends VBox {
                 "-fx-background-color: linear-gradient(to bottom right, #f8fafc 0%, #eef2ff 35%, #e0e7ff 70%, #f5f3ff 100%); "
                         + FONT);
 
-        // 1. Header Section
         HBox header = buildHeader();
 
-        // 2. Responsive Split View (Left Column vs Right Column)
         SplitPane splitPane = new SplitPane();
         splitPane.setStyle("-fx-background-color: transparent; -fx-box-border: transparent; -fx-padding: 0;");
         VBox.setVgrow(splitPane, Priority.ALWAYS);
 
-        // Left Column: Election Selector & Position Tree
         VBox leftColumn = new VBox(12);
         leftColumn.setPadding(new Insets(0, 8, 0, 0));
         leftColumn.getChildren().addAll(
@@ -67,7 +70,6 @@ public class CandidatePage extends VBox {
                 buildElectionCandidateSection());
         VBox.setVgrow(leftColumn.getChildren().get(1), Priority.ALWAYS);
 
-        // Right Column: Search, Applications, and Approved Rosters
         VBox rightColumn = new VBox(12);
         rightColumn.setPadding(new Insets(0, 0, 0, 8));
         rightColumn.getChildren().addAll(
@@ -85,9 +87,6 @@ public class CandidatePage extends VBox {
         fetchCandidatesFromFirebase();
     }
 
-    // =========================================================
-    // 1. HEADER SECTION
-    // =========================================================
     private HBox buildHeader() {
         HBox header = new HBox();
         header.setAlignment(Pos.CENTER_LEFT);
@@ -115,9 +114,6 @@ public class CandidatePage extends VBox {
         return header;
     }
 
-    // =========================================================
-    // 2. ELECTION SELECTOR CARD (LEFT)
-    // =========================================================
     private VBox buildElectionSelector() {
         VBox card = new VBox(8);
         card.setPadding(new Insets(12, 14, 12, 14));
@@ -139,12 +135,8 @@ public class CandidatePage extends VBox {
         top.getChildren().addAll(selectLabel, sp, badge);
 
         electionCombo = new ComboBox<>();
-        electionCombo.setPromptText("Select an election...");
+        electionCombo.setPromptText("Loading elections...");
         electionCombo.setMaxWidth(Double.MAX_VALUE);
-        electionCombo.getItems().addAll(
-                "Student Council Election",
-                "Cultural Committee Election",
-                "Sports Committee Election");
         electionCombo.setStyle(FONT
                 + "-fx-background-color: #f8fafc; -fx-border-color: #cbd5e1; -fx-border-radius: 8; -fx-background-radius: 8; -fx-font-size: 12px; -fx-font-weight: 600; -fx-padding: 4 8;");
         electionCombo.setOnAction(e -> refreshElectionCandidates());
@@ -153,9 +145,6 @@ public class CandidatePage extends VBox {
         return card;
     }
 
-    // =========================================================
-    // 3. ELECTION-WISE CANDIDATES (LEFT COLUMN)
-    // =========================================================
     private VBox buildElectionCandidateSection() {
         VBox section = new VBox(8);
         section.setPadding(new Insets(12, 14, 12, 14));
@@ -175,9 +164,6 @@ public class CandidatePage extends VBox {
         return section;
     }
 
-    // =========================================================
-    // 4. FILTER & SEARCH TOOLBAR (RIGHT COLUMN TOP)
-    // =========================================================
     private HBox buildFilterBar() {
         HBox filterBar = new HBox(10);
         filterBar.setAlignment(Pos.CENTER_LEFT);
@@ -238,9 +224,6 @@ public class CandidatePage extends VBox {
         return filterBar;
     }
 
-    // =========================================================
-    // 5. APPLICATION SECTION (RIGHT COLUMN MIDDLE)
-    // =========================================================
     private VBox buildApplicationSection() {
         VBox section = new VBox(8);
         section.setPadding(new Insets(12, 14, 12, 14));
@@ -271,9 +254,6 @@ public class CandidatePage extends VBox {
         return section;
     }
 
-    // =========================================================
-    // 6. APPROVED CANDIDATES SECTION (RIGHT COLUMN BOTTOM)
-    // =========================================================
     private VBox buildApprovedSection() {
         VBox section = new VBox(8);
         section.setPadding(new Insets(12, 14, 12, 14));
@@ -305,9 +285,6 @@ public class CandidatePage extends VBox {
         return section;
     }
 
-    // =========================================================
-    // BUTTON STYLING HELPERS
-    // =========================================================
     private void setNormalButton(Button button, String background, String textColor, String borderColor) {
         button.setMinWidth(Region.USE_PREF_SIZE);
         button.setStyle(FONT +
@@ -337,26 +314,65 @@ public class CandidatePage extends VBox {
                 "-fx-cursor: hand;");
     }
 
-    // =========================================================
-    // ASYNCHRONOUS FIREBASE LOGIC
-    // =========================================================
     private void fetchCandidatesFromFirebase() {
         loadingSpinner.setVisible(true);
 
         CompletableFuture.supplyAsync(() -> {
-            return ElectionController.loadElections();
-        }).thenAccept(elections -> Platform.runLater(() -> {
+            String joinCode = SessionManager.joinCode;
+            String idToken = SessionManager.idToken;
+            List<ElectionData> elections = new ArrayList<>();
+            List<Candidate> candidateDocs = new ArrayList<>();
+
+            try {
+                if (joinCode != null && !joinCode.isBlank()) {
+                    elections = ElectionDAO.getElectionsByOrg(joinCode, idToken);
+                    candidateDocs = CandidateDAO.getCandidatesByOrg(joinCode, idToken);
+                }
+            } catch (Exception ex) {
+                ex.printStackTrace();
+            }
+            return new Object[]{elections, candidateDocs};
+        }).thenAccept(results -> Platform.runLater(() -> {
+            @SuppressWarnings("unchecked")
+            List<ElectionData> elections = (List<ElectionData>) results[0];
+            @SuppressWarnings("unchecked")
+            List<Candidate> candidateDocs = (List<Candidate>) results[1];
+
+            loadedElections.clear();
+            loadedElections.addAll(elections);
+
             if (electionCombo != null) {
                 electionCombo.getItems().clear();
                 for (ElectionData e : elections) {
-                    electionCombo.getItems().add(e.getTitle());
+                    electionCombo.getItems().add(e.getTitle() != null ? e.getTitle() : "Untitled Election");
                 }
                 if (!elections.isEmpty()) {
                     electionCombo.setValue(elections.get(0).getTitle());
+                } else {
+                    electionCombo.setPromptText("No elections created");
                 }
             }
+
             applications.clear();
-            applications.addAll(getInitialFallbackData());
+            for (Candidate c : candidateDocs) {
+                String appliedDateStr = formatEpoch(c.getAppliedAt());
+                String electionName = (c.getElectionTitle() != null && !c.getElectionTitle().isBlank())
+                        ? c.getElectionTitle()
+                        : (c.getElectionId() != null ? c.getElectionId() : "General Election");
+
+                applications.add(new CandidateModel(
+                        c.getId(),
+                        c.getName() != null ? c.getName() : "Unknown Candidate",
+                        c.getEmail() != null ? c.getEmail() : "",
+                        c.getPhone() != null ? c.getPhone() : "",
+                        electionName,
+                        c.getPosition() != null ? c.getPosition() : "Nominee",
+                        appliedDateStr,
+                        c.getStatus() != null ? c.getStatus().toUpperCase() : "PENDING",
+                        c.getBio() != null ? c.getBio() : "No manifesto submitted."
+                ));
+            }
+
             loadingSpinner.setVisible(false);
             refreshApplications();
             refreshApprovedCandidates();
@@ -364,10 +380,22 @@ public class CandidatePage extends VBox {
         })).exceptionally(ex -> {
             Platform.runLater(() -> {
                 loadingSpinner.setVisible(false);
-                showBaseAlert("Sync Error", "Failed to fetch candidates: " + ex.getMessage());
+                showBaseAlert("Sync Error", "Failed to fetch candidates from Firebase: " + ex.getMessage());
             });
             return null;
         });
+    }
+
+    private String formatEpoch(long epochMillis) {
+        if (epochMillis <= 0) {
+            return LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd MMM yyyy"));
+        }
+        try {
+            return LocalDateTime.ofInstant(Instant.ofEpochMilli(epochMillis), ZoneId.systemDefault())
+                    .format(DateTimeFormatter.ofPattern("dd MMM yyyy"));
+        } catch (Exception e) {
+            return LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd MMM yyyy"));
+        }
     }
 
     private void updateCandidateStatusInFirebase(CandidateModel app, String newStatus) {
@@ -375,8 +403,10 @@ public class CandidatePage extends VBox {
 
         CompletableFuture.runAsync(() -> {
             try {
-                Thread.sleep(200);
-            } catch (InterruptedException ignored) {
+                String idToken = SessionManager.idToken != null ? SessionManager.idToken : "";
+                CandidateDAO.updateStatus(app.documentId, newStatus, idToken);
+            } catch (Exception ex) {
+                throw new RuntimeException(ex);
             }
             app.status = newStatus;
         }).thenRun(() -> Platform.runLater(() -> {
@@ -387,15 +417,12 @@ public class CandidatePage extends VBox {
         })).exceptionally(ex -> {
             Platform.runLater(() -> {
                 loadingSpinner.setVisible(false);
-                showBaseAlert("Update Error", "Failed to update status in Firebase: " + ex.getMessage());
+                showBaseAlert("Update Error", "Failed to update candidate status in Firebase: " + ex.getMessage());
             });
             return null;
         });
     }
 
-    // =========================================================
-    // APPLICATION CARDS (UN-CLIPPED FULL-TEXT BUTTONS)
-    // =========================================================
     void refreshApplications() {
         applicationList.getChildren().clear();
         String query = searchField != null ? searchField.getText().toLowerCase().trim() : "";
@@ -466,12 +493,11 @@ public class CandidatePage extends VBox {
         Label posLabel = new Label("Contesting: " + app.position + "  •  " + app.election);
         posLabel.setStyle(FONT + "-fx-text-fill: #2563eb; -fx-font-size: 11.5px; -fx-font-weight: 800;");
 
-        Label contact = new Label("✉ " + app.email + "  •  Applied: " + app.date);
+        Label contact = new Label("✉ " + (app.email.isEmpty() ? "No email provided" : app.email) + "  •  Applied: " + app.date);
         contact.setStyle(FONT + "-fx-text-fill: #64748b; -fx-font-size: 11px; -fx-font-weight: 600;");
 
         leftInfo.getChildren().addAll(name, posLabel, contact);
 
-        // ACTION BUTTONS CONTAINER (PROTECTED FROM SHRINKING)
         HBox actions = new HBox(8);
         actions.setAlignment(Pos.CENTER_RIGHT);
         actions.setMinWidth(Region.USE_PREF_SIZE);
@@ -505,9 +531,6 @@ public class CandidatePage extends VBox {
         return card;
     }
 
-    // =========================================================
-    // APPROVED CANDIDATES (UN-CLIPPED FULL-TEXT VIEW BUTTON)
-    // =========================================================
     private void refreshApprovedCandidates() {
         approvedList.getChildren().clear();
         String query = searchField != null ? searchField.getText().toLowerCase().trim() : "";
@@ -589,9 +612,6 @@ public class CandidatePage extends VBox {
         return card;
     }
 
-    // =========================================================
-    // REFRESH ELECTION-WISE CANDIDATES (LEFT COLUMN)
-    // =========================================================
     private void refreshElectionCandidates() {
         electionCandidateList.getChildren().clear();
         String selected = electionCombo.getValue();
@@ -661,7 +681,7 @@ public class CandidatePage extends VBox {
 
         Label name = new Label(app.name);
         name.setStyle(FONT + "-fx-font-weight: 800; -fx-font-size: 12px; -fx-text-fill: #0f172a;");
-        Label email = new Label(app.email);
+        Label email = new Label(app.email.isEmpty() ? "Verified Candidate" : app.email);
         email.setStyle(FONT + "-fx-text-fill: #64748b; -fx-font-size: 10.5px;");
         info.getChildren().addAll(name, email);
 
@@ -675,9 +695,6 @@ public class CandidatePage extends VBox {
         return card;
     }
 
-    // =========================================================
-    // DIALOGS & CONFIRMATIONS
-    // =========================================================
     private void showDetails(CandidateModel app) {
         Dialog<ButtonType> dialog = createBaseDialog("Candidate Dossier", "Official Application & Statement File", "👤",
                 "#2563eb", "#eff6ff");
@@ -706,8 +723,8 @@ public class CandidatePage extends VBox {
         grid.setStyle(
                 "-fx-background-color: #f8fafc; -fx-background-radius: 10; -fx-border-color: #e2e8f0; -fx-border-radius: 10; -fx-border-width: 1.2;");
 
-        grid.add(createMetaField("Email Address", app.email), 0, 0);
-        grid.add(createMetaField("Phone Number", app.phone), 0, 1);
+        grid.add(createMetaField("Email Address", app.email.isEmpty() ? "N/A" : app.email), 0, 0);
+        grid.add(createMetaField("Phone Number", app.phone.isEmpty() ? "N/A" : app.phone), 0, 1);
         grid.add(createMetaField("Target Election", app.election), 1, 0);
         grid.add(createMetaField("Target Office", app.position), 1, 1);
         grid.add(createMetaField("Application Date", app.date), 0, 2);
@@ -736,11 +753,7 @@ public class CandidatePage extends VBox {
     }
 
     private void acceptApplication(CandidateModel app) {
-        Dialog<ButtonType> confirmation = new Dialog<>();
-        if (AdminDashboard.AdminDashboardStage != null) {
-            confirmation.initOwner(AdminDashboard.AdminDashboardStage);
-        }
-        confirmation.setTitle("Accept Candidate Application");
+        Dialog<ButtonType> confirmation = createBaseDialog("Accept Candidate", "Confirm approval", "✓", "#10b981", "#ecfdf5");
 
         VBox contentBox = new VBox(14);
         contentBox.setPadding(new Insets(20));
@@ -758,14 +771,12 @@ public class CandidatePage extends VBox {
         textBox.setAlignment(Pos.CENTER);
         Label title = new Label("Accept " + app.name + "?");
         title.setStyle(FONT + "-fx-font-size: 16px; -fx-font-weight: 900; -fx-text-fill: #064e3b;");
-        Label desc = new Label("This applicant will be officially placed on the election ballot in Firebase.");
+        Label desc = new Label("This candidate will be approved in Firebase and published to the live ballot.");
         desc.setStyle(FONT + "-fx-font-size: 12px; -fx-text-fill: #64748b;");
         textBox.getChildren().addAll(title, desc);
 
         contentBox.getChildren().addAll(iconStack, textBox);
         confirmation.getDialogPane().setContent(contentBox);
-        confirmation.getDialogPane().setStyle(
-                "-fx-background-color: #ffffff; -fx-border-color: #10b981; -fx-border-width: 1.5; -fx-border-radius: 12; -fx-background-radius: 12;");
 
         ButtonType acceptBtnType = new ButtonType("Accept", ButtonBar.ButtonData.OK_DONE);
         ButtonType cancelBtnType = new ButtonType("Cancel", ButtonBar.ButtonData.CANCEL_CLOSE);
@@ -781,11 +792,7 @@ public class CandidatePage extends VBox {
     }
 
     private void rejectApplication(CandidateModel app) {
-        Dialog<ButtonType> confirmation = new Dialog<>();
-        if (AdminDashboard.AdminDashboardStage != null) {
-            confirmation.initOwner(AdminDashboard.AdminDashboardStage);
-        }
-        confirmation.setTitle("Reject Candidate Application");
+        Dialog<ButtonType> confirmation = createBaseDialog("Reject Candidate", "Confirm rejection", "✕", "#ef4444", "#fee2e2");
 
         VBox contentBox = new VBox(14);
         contentBox.setPadding(new Insets(20));
@@ -794,23 +801,21 @@ public class CandidatePage extends VBox {
         contentBox.setStyle("-fx-background-color: #ffffff; " + FONT);
 
         Circle outerHalo = new Circle(26, Color.web("#fee2e2"));
-        Circle innerCircle = new Circle(18, Color.web("#ef4444"));
+        Circle innerCircle = new Circle(18, Color.web("#dc2626"));
         Label icon = new Label("✕");
-        errorIconStyle(icon);
+        icon.setStyle(FONT + "-fx-text-fill: white; -fx-font-size: 15px; -fx-font-weight: 900;");
         StackPane iconStack = new StackPane(outerHalo, innerCircle, icon);
 
         VBox textBox = new VBox(4);
         textBox.setAlignment(Pos.CENTER);
         Label title = new Label("Reject " + app.name + "?");
         title.setStyle(FONT + "-fx-font-size: 16px; -fx-font-weight: 900; -fx-text-fill: #991b1b;");
-        Label desc = new Label("This application will be denied and marked as rejected in Firebase.");
+        Label desc = new Label("This candidate will be rejected in Firebase and excluded from the ballot.");
         desc.setStyle(FONT + "-fx-font-size: 12px; -fx-text-fill: #64748b;");
         textBox.getChildren().addAll(title, desc);
 
         contentBox.getChildren().addAll(iconStack, textBox);
         confirmation.getDialogPane().setContent(contentBox);
-        confirmation.getDialogPane().setStyle(
-                "-fx-background-color: #ffffff; -fx-border-color: #ef4444; -fx-border-width: 1.5; -fx-border-radius: 12; -fx-background-radius: 12;");
 
         ButtonType rejectBtnType = new ButtonType("Reject", ButtonBar.ButtonData.OK_DONE);
         ButtonType cancelBtnType = new ButtonType("Cancel", ButtonBar.ButtonData.CANCEL_CLOSE);
@@ -825,106 +830,52 @@ public class CandidatePage extends VBox {
         });
     }
 
-    private void errorIconStyle(Label icon) {
-        icon.setStyle(FONT + "-fx-text-fill: white; -fx-font-size: 15px; -fx-font-weight: 900;");
+    private VBox createMetaField(String label, String value) {
+        VBox box = new VBox(2);
+        Label l = new Label(label);
+        l.setStyle(FONT + "-fx-text-fill: #64748b; -fx-font-size: 11px; -fx-font-weight: 700;");
+        Label v = new Label(value);
+        v.setStyle(FONT + "-fx-text-fill: #1e1b4b; -fx-font-size: 12.5px; -fx-font-weight: 800;");
+        box.getChildren().addAll(l, v);
+        return box;
     }
 
-    private VBox createMetaField(String title, String val) {
-        VBox v = new VBox(2);
-        Label l = new Label(title);
-        l.setStyle(FONT + "-fx-font-size: 11px; -fx-font-weight: 800; -fx-text-fill: #64748b;");
-
-        Label value = new Label(val);
-        value.setStyle(FONT + "-fx-font-size: 12.5px; -fx-font-weight: 800; -fx-text-fill: #0f172a;");
-        v.getChildren().addAll(l, value);
-        return v;
-    }
-
-    private Dialog<ButtonType> createBaseDialog(String title, String headerSubtitle, String iconGlyph, String iconColor,
-            String iconBgHex) {
+    private Dialog<ButtonType> createBaseDialog(String titleStr, String subtitleStr, String iconGlyph,
+            String colorHex, String bgHex) {
         Dialog<ButtonType> dialog = new Dialog<>();
         if (AdminDashboard.AdminDashboardStage != null) {
             dialog.initOwner(AdminDashboard.AdminDashboardStage);
+            dialog.initModality(javafx.stage.Modality.WINDOW_MODAL);
+        } else {
+            com.electrovotesuperx.utils.Navigation.attachOwner(dialog);
         }
-        dialog.setTitle(title);
+        dialog.setTitle(titleStr);
 
-        HBox headerBox = new HBox(12);
-        headerBox.setAlignment(Pos.CENTER_LEFT);
-        headerBox.setPadding(new Insets(14, 18, 14, 18));
-        headerBox.setStyle("-fx-background-color: #f8fafc; -fx-border-color: #e2e8f0; -fx-border-width: 0 0 1.2 0;");
-
-        Circle iconCircle = new Circle(16, Color.web(iconBgHex));
-        Label icon = new Label(iconGlyph);
-        icon.setStyle(FONT + "-fx-font-size: 14px;");
-        StackPane iconPane = new StackPane(iconCircle, icon);
-
-        VBox titleArea = new VBox(2);
-        Label mainTitle = new Label(title);
-        mainTitle.setStyle(FONT + "-fx-font-size: 15px; -fx-font-weight: 900; -fx-text-fill: #1e1b4b;");
-        Label sub = new Label(headerSubtitle);
-        sub.setStyle(FONT + "-fx-font-size: 11px; -fx-text-fill: #4338ca; -fx-font-weight: 600;");
-        titleArea.getChildren().addAll(mainTitle, sub);
-
-        headerBox.getChildren().addAll(iconPane, titleArea);
-        dialog.getDialogPane().setHeader(headerBox);
-        dialog.getDialogPane().setStyle(
-                "-fx-background-color: #ffffff; -fx-border-color: #818cf8; -fx-border-width: 1.5; -fx-border-radius: 12; -fx-background-radius: 12; "
-                        + FONT);
-
+        dialog.getDialogPane().setStyle("-fx-background-color: #ffffff; -fx-border-color: " + colorHex
+                + "; -fx-border-width: 1.5; -fx-border-radius: 14; -fx-background-radius: 14;");
         return dialog;
     }
 
-    private void styleDialogButtons(Dialog<ButtonType> dialog, String primaryColor, ButtonType primaryType) {
-        Button primaryBtn = (Button) dialog.getDialogPane().lookupButton(primaryType);
-        if (primaryBtn != null) {
-            primaryBtn.setMinWidth(Region.USE_PREF_SIZE);
-            primaryBtn.setStyle(FONT + "-fx-background-color: " + primaryColor
-                    + "; -fx-text-fill: white; -fx-font-weight: 900; -fx-font-size: 12px; -fx-background-radius: 8; -fx-padding: 8 18; -fx-cursor: hand;");
-        }
-
-        Button cancelBtn = (Button) dialog.getDialogPane().lookupButton(ButtonType.CANCEL);
-        if (cancelBtn != null) {
-            cancelBtn.setMinWidth(Region.USE_PREF_SIZE);
-            cancelBtn.setStyle(FONT
-                    + "-fx-background-color: #f1f5f9; -fx-text-fill: #334155; -fx-font-weight: 800; -fx-font-size: 12px; -fx-background-radius: 8; -fx-padding: 8 16; -fx-cursor: hand; -fx-border-color: #cbd5e1; -fx-border-radius: 8;");
+    private void styleDialogButtons(Dialog<ButtonType> dialog, String primaryColorHex, ButtonType okType) {
+        Button okButton = (Button) dialog.getDialogPane().lookupButton(okType);
+        if (okButton != null) {
+            okButton.setStyle(FONT + "-fx-background-color: " + primaryColorHex
+                    + "; -fx-text-fill: white; -fx-font-weight: 800; -fx-font-size: 12px; -fx-background-radius: 6; -fx-padding: 6 16; -fx-cursor: hand;");
         }
     }
 
     private void showBaseAlert(String title, String message) {
         Alert alert = new Alert(Alert.AlertType.INFORMATION);
+        if (AdminDashboard.AdminDashboardStage != null) {
+            alert.initOwner(AdminDashboard.AdminDashboardStage);
+            alert.initModality(javafx.stage.Modality.WINDOW_MODAL);
+        } else {
+            com.electrovotesuperx.utils.Navigation.attachOwner(alert);
+        }
         alert.setTitle(title);
         alert.setHeaderText(null);
         alert.setContentText(message);
         alert.showAndWait();
-    }
-
-    // =========================================================
-    // FALLBACK / SAMPLE DATA
-    // =========================================================
-    private List<CandidateModel> getInitialFallbackData() {
-        List<CandidateModel> list = new ArrayList<>();
-        list.add(new CandidateModel("DOC_C01", "Rahul Sharma", "rahul@gmail.com", "9876543210",
-                "Student Council Election", "President", "14 Aug 2026", "PENDING",
-                "I want to represent students and foster transparent academic dialogue."));
-        list.add(new CandidateModel("DOC_C02", "Priya Patil", "priya@gmail.com", "9876543211",
-                "Student Council Election", "Secretary", "14 Aug 2026", "PENDING",
-                "Dedicated to improving campus infrastructure, student grievances, and library resources."));
-        list.add(new CandidateModel("DOC_C03", "Amit Kulkarni", "amit@gmail.com", "9876543212",
-                "Student Council Election", "President", "13 Aug 2026", "PENDING",
-                "Focused on industry mentorship, tech club expansions, and internship opportunities."));
-        list.add(new CandidateModel("DOC_C04", "Sneha Joshi", "sneha@gmail.com", "9876543213",
-                "Student Council Election", "Treasurer", "12 Aug 2026", "ACCEPTED",
-                "Ensuring transparent club budgeting, audit disclosures, and event sponsorships."));
-        list.add(new CandidateModel("DOC_C05", "Rohit Patil", "rohit@gmail.com", "9876543214",
-                "Student Council Election", "Secretary", "11 Aug 2026", "REJECTED",
-                "Looking to coordinate sports meets and inter-collegiate events."));
-        list.add(new CandidateModel("DOC_C06", "Neha Deshmukh", "neha@gmail.com", "9876543215",
-                "Cultural Committee Election", "President", "10 Aug 2026", "ACCEPTED",
-                "Organizing annual arts exhibitions, drama competitions, and cultural festivals."));
-        list.add(new CandidateModel("DOC_C07", "Akash More", "akash@gmail.com", "9876543216",
-                "Cultural Committee Election", "Secretary", "10 Aug 2026", "ACCEPTED",
-                "Streamlining venue approvals, equipment setups, and sound systems."));
-        return list;
     }
 
     // =========================================================
@@ -952,20 +903,6 @@ public class CandidatePage extends VBox {
             this.date = date;
             this.status = status;
             this.statement = statement;
-        }
-
-        public static CandidateModel fromFirestoreDocument(String docId, Map<String, Object> data) {
-            return new CandidateModel(
-                    docId,
-                    (String) data.getOrDefault("candidateName", "Unknown"),
-                    (String) data.getOrDefault("email", ""),
-                    (String) data.getOrDefault("phone", ""),
-                    (String) data.getOrDefault("electionTitle", "General Election"),
-                    (String) data.getOrDefault("position", "Nominee"),
-                    (String) data.getOrDefault("appliedAt",
-                            LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd MMM yyyy"))),
-                    (String) data.getOrDefault("status", "PENDING"),
-                    (String) data.getOrDefault("statement", "No statement provided."));
         }
 
         public Map<String, Object> toFirestoreMap(String organizationId) {

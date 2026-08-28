@@ -187,11 +187,17 @@ Platform.runLater(() -> {
     signIn.setDisable(false);
 
     // Persist session for all controllers
+    String adminDisplayName = FirestoreDAO.getString(organization, "adminName");
+    if (adminDisplayName == null || adminDisplayName.isBlank()) {
+        adminDisplayName = "Administrator";
+    }
+
     com.elctrovotesuperx.config.SessionManager.idToken = auth.getIdToken();
     com.elctrovotesuperx.config.SessionManager.joinCode = code;
     com.elctrovotesuperx.config.SessionManager.organizationName = organizationName;
     com.elctrovotesuperx.config.SessionManager.adminUid = auth.getLocalId();
     com.elctrovotesuperx.config.SessionManager.adminEmail = adminEmail;
+    com.elctrovotesuperx.config.SessionManager.adminName = adminDisplayName;
 
     Stage stage = (Stage) scene.getWindow();
 
@@ -270,6 +276,7 @@ Platform.runLater(() -> {
                            String message){
 
         Alert alert = new Alert(type);
+        com.electrovotesuperx.utils.Navigation.attachOwner(alert);
         alert.setTitle(title);
         alert.setHeaderText(null);
         alert.setContentText(message);

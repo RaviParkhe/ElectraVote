@@ -500,26 +500,46 @@ public class ActiveElection {
                 heading.getChildren().addAll(title, subtitle);
 
                 VBox electionsList = new VBox(16);
+                VBox loadingBox = new VBox(10);
+                loadingBox.setAlignment(Pos.CENTER);
+                loadingBox.setPadding(new Insets(30));
+                loadingBox.getChildren().addAll(new javafx.scene.control.ProgressIndicator(), new Label("Loading active elections from Firebase..."));
+                electionsList.getChildren().add(loadingBox);
 
                 Thread t = new Thread(() -> {
-                        List<ElectionData> elections = ElectionController.loadElections();
+                        String joinCode = com.elctrovotesuperx.config.SessionManager.joinCode;
+                        String idToken = com.elctrovotesuperx.config.SessionManager.idToken;
+                        List<ElectionData> elections = new java.util.ArrayList<>();
+                        try {
+                                if (joinCode != null && !joinCode.isBlank()) {
+                                        elections = com.elctrovotesuperx.dao.AdminDAO.ElectionDAO.getElectionsByOrg(joinCode, idToken);
+                                }
+                        } catch (Exception ex) {
+                                ex.printStackTrace();
+                        }
+
+                        List<ElectionData> finalElections = elections;
                         Platform.runLater(() -> {
                                 electionsList.getChildren().clear();
-                                if (elections.isEmpty()) {
-                                        electionsList.getChildren().add(createElectionCard(
-                                                "Student Council General Election 2026",
-                                                "Status: Upcoming • Opens in 5 Days",
-                                                "Open to all enrolled students. Positions available include President, Vice President, and Treasurer.",
-                                                true));
-                                        electionsList.getChildren().add(createElectionCard(
-                                                "Department Tech Board Representative",
-                                                "Status: Live Now",
-                                                "Voting is currently underway for this election. Candidacy applications are closed. Please cast your ballot in the Vote tab.",
-                                                false));
+                                if (finalElections.isEmpty()) {
+                                        VBox emptyBox = new VBox(12);
+                                        emptyBox.setAlignment(Pos.CENTER);
+                                        emptyBox.setPadding(new Insets(35));
+                                        emptyBox.setStyle("-fx-background-color: white; -fx-background-radius: 12; -fx-border-color: " + BORDER + "; -fx-border-radius: 12;");
+                                        Label icon = new Label("🗳️");
+                                        icon.setFont(Font.font(36));
+                                        Text emptyTitle = new Text("No Elections Scheduled Yet");
+                                        emptyTitle.setFont(Font.font("Arial", FontWeight.BOLD, 17));
+                                        emptyTitle.setFill(Color.web(TEXT));
+                                        Text emptySub = new Text("When the organization administrator creates an election, it will appear here for voting and candidate filings.");
+                                        emptySub.setFill(Color.web(SECONDARY));
+                                        emptySub.setFont(Font.font(13));
+                                        emptyBox.getChildren().addAll(icon, emptyTitle, emptySub);
+                                        electionsList.getChildren().add(emptyBox);
                                 } else {
-                                        for (ElectionData e : elections) {
-                                                boolean isUpcoming = "Upcoming".equalsIgnoreCase(e.getStatus()) || "Draft".equalsIgnoreCase(e.getStatus());
-                                                String meta = "Status: " + (e.getStatus() != null ? e.getStatus() : "Active") + " • " + e.getStartDateTime() + " to " + e.getEndDateTime();
+                                        for (ElectionData e : finalElections) {
+                                                boolean isUpcoming = "Upcoming".equalsIgnoreCase(e.getStatus()) || "Draft".equalsIgnoreCase(e.getStatus()) || "Active".equalsIgnoreCase(e.getStatus());
+                                                String meta = "Status: " + (e.getStatus() != null ? e.getStatus() : "Active") + " • " + (e.getStartDateTime() != null ? e.getStartDateTime() : "") + " to " + (e.getEndDateTime() != null ? e.getEndDateTime() : "");
                                                 String desc = (e.getDescription() != null && !e.getDescription().isBlank())
                                                         ? e.getDescription()
                                                         : "Official election ballot. Configured positions: " + (e.getPositions() != null && !e.getPositions().isEmpty() ? String.join(", ", e.getPositions()) : "General");
@@ -565,31 +585,19 @@ public class ActiveElection {
                 HBox.setHgrow(spacer, Priority.ALWAYS);
 
                 Button applyBtn = new Button();
-                if (isUpcoming) {
-                        applyBtn.setText("Apply as Candidate ➔");
-                        applyBtn.setStyle(
-                                        "-fx-background-color: linear-gradient(to right, #1464F4, #0D3565);" +
-                                                        "-fx-text-fill: white;" +
-                                                        "-fx-font-weight: bold;" +
-                                                        "-fx-font-size: 12.5px;" +
-                                                        "-fx-padding: 9 16;" +
-                                                        "-fx-background-radius: 7;" +
-                                                        "-fx-cursor: hand;");
-                        applyBtn.setOnAction(e -> {
-                                VBox formView = createCandidateApplicationForm(name);
-                                VoterDashboard.dashboardCenter.setCenter(formView);
-                        });
-                } else {
-                        applyBtn.setText("Applications Closed (Live)");
-                        applyBtn.setDisable(true);
-                        applyBtn.setStyle(
-                                        "-fx-background-color: #F1F5F9;" +
-                                                        "-fx-text-fill: #94A3B8;" +
-                                                        "-fx-font-weight: bold;" +
-                                                        "-fx-font-size: 12px;" +
-                                                        "-fx-padding: 9 16;" +
-                                                        "-fx-background-radius: 7;");
-                }
+                applyBtn.setText("Apply as Candidate ➔");
+                applyBtn.setStyle(
+                                "-fx-background-color: linear-gradient(to right, #1464F4, #0D3565);" +
+                                                "-fx-text-fill: white;" +
+                                                "-fx-font-weight: bold;" +
+                                                "-fx-font-size: 12.5px;" +
+                                                "-fx-padding: 9 16;" +
+                                                "-fx-background-radius: 7;" +
+                                                "-fx-cursor: hand;");
+                applyBtn.setOnAction(e -> {
+                        VBox formView = ApplyCandidateView.createApplyCandidateView(name);
+                        VoterDashboard.dashboardCenter.setCenter(formView);
+                });
 
                 topRow.getChildren().addAll(titleBox, spacer, applyBtn);
 
@@ -715,9 +723,23 @@ public class ActiveElection {
                         String timestamp = LocalDateTime.now()
                                         .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
 
-                        // Hook up Controller / DAO integration here:
-                        // CandidateDAO.submitApplication(electionTitle, name, mobile, email, position,
-                        // statement, timestamp);
+                        String id = java.util.UUID.randomUUID().toString();
+                        String joinCode = com.elctrovotesuperx.config.SessionManager.joinCode != null ? com.elctrovotesuperx.config.SessionManager.joinCode : "DEMO_ORG";
+                        String idToken = com.elctrovotesuperx.config.SessionManager.idToken != null ? com.elctrovotesuperx.config.SessionManager.idToken : "";
+
+                        com.elctrovotesuperx.model.AdminModel.Candidate candidate = new com.elctrovotesuperx.model.AdminModel.Candidate(
+                                id, electionTitle, electionTitle, position, name, email, mobile, statement, joinCode
+                        );
+
+                        Thread submitThread = new Thread(() -> {
+                            try {
+                                com.elctrovotesuperx.dao.AdminDAO.CandidateDAO.saveCandidate(candidate, idToken);
+                            } catch (Exception ex) {
+                                ex.printStackTrace();
+                            }
+                        });
+                        submitThread.setDaemon(true);
+                        submitThread.start();
 
                         VBox successView = createApplicationSuccessView(electionTitle, name, mobile, email, position,
                                         statement, timestamp);

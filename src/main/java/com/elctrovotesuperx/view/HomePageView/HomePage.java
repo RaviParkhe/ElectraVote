@@ -2,7 +2,8 @@ package com.elctrovotesuperx.view.HomePageView;
 
 import com.elctrovotesuperx.view.Page;
 import com.elctrovotesuperx.view.OrganizationView.OrganizationPortal;
-import com.elctrovotesuperx.view.OfflineView.HomepageOffline;
+import com.electrovotesuperx.view.OfflineView.OfflineHomePage;
+import com.electrovotesuperx.utils.Navigation;
 import com.elctrovotesuperx.view.QuickPollView.QuickPoll;
 
 import javafx.geometry.Insets;
@@ -284,12 +285,10 @@ public class HomePage implements Page {
                     "#059669"
                 );
         offlineButton.setOnAction(e -> {
-            HomepageOffline offline = new HomepageOffline();
-            try {
-                offline.start(stage);
-            } catch (Exception ex) {
-                ex.printStackTrace();
-            }
+            Navigation.init(stage);
+            OfflineHomePage offline = new OfflineHomePage();
+            stage.setScene(offline.getScene());
+            stage.setMaximized(true);
         });
 
         offlineCard.getChildren().add(
