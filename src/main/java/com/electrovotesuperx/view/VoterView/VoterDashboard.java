@@ -27,6 +27,8 @@ import javafx.scene.text.Text;
 import javafx.stage.Stage;
 
 import java.util.List;
+import java.util.Map;
+import java.util.HashMap;
 
 public class VoterDashboard extends Application {
 
@@ -202,6 +204,11 @@ public class VoterDashboard extends Application {
             showPage(JoinOrganization.createJoinOrganizationView());
         });
 
+        notifBtn.setOnAction(e -> {
+            setActiveMenu(menu, notifBtn);
+            showPage(Notification.createNotificationView());
+        });
+
         Button quickPollBtn = createMenuButton("📊", "Quick Polls", false);
         quickPollBtn.setOnAction(e -> {
             com.electrovotesuperx.view.QuickPollView.QuickPoll qp = new com.electrovotesuperx.view.QuickPollView.QuickPoll();
@@ -226,12 +233,15 @@ public class VoterDashboard extends Application {
             System.out.println("Voter logging out...");
             com.electrovotesuperx.config.SessionManager.clearSession();
             Stage currentStage = VoterDashboardStage != null ? VoterDashboardStage : com.electrovotesuperx.utils.Navigation.getStage();
-            com.electrovotesuperx.view.HomePageView.HomePage home = new com.electrovotesuperx.view.HomePageView.HomePage(currentStage);
-            Scene homeScene = home.getScene(() -> {
-                if (currentStage != null) currentStage.close();
-            });
             if (currentStage != null) {
-                currentStage.setScene(homeScene);
+                com.electrovotesuperx.view.LoginPageView.Login.loginStage = currentStage;
+                com.electrovotesuperx.utils.Navigation.init(currentStage);
+                com.electrovotesuperx.view.LoginPageView.Login login = new com.electrovotesuperx.view.LoginPageView.Login();
+                Scene loginScene = login.getScene(() -> {
+                    currentStage.close();
+                });
+                currentStage.setTitle("ElectraVote");
+                currentStage.setScene(loginScene);
                 currentStage.setMaximized(true);
                 currentStage.show();
             }
@@ -247,12 +257,14 @@ public class VoterDashboard extends Application {
                 Button btn = (Button) node;
                 btn.setStyle(
                         "-fx-background-color: transparent;" +
+                                "-fx-text-fill: white;" +
                                 "-fx-background-radius: 7;" +
                                 "-fx-cursor: hand;");
             }
         }
         selectedButton.setStyle(
                 "-fx-background-color: #1464F4;" +
+                        "-fx-text-fill: white;" +
                         "-fx-background-radius: 7;" +
                         "-fx-cursor: hand;");
     }
@@ -279,22 +291,24 @@ public class VoterDashboard extends Application {
         if (selected) {
             button.setStyle(
                     "-fx-background-color: " + BLUE + ";" +
+                            "-fx-text-fill: white;" +
                             "-fx-background-radius: 7;" +
                             "-fx-cursor: hand;");
         } else {
             button.setStyle(
                     "-fx-background-color: transparent;" +
+                            "-fx-text-fill: white;" +
                             "-fx-background-radius: 7;" +
                             "-fx-cursor: hand;");
             button.setOnMouseEntered(e -> {
                 if (!button.getStyle().contains(BLUE)) {
                     button.setStyle(
-                            "-fx-background-color: " + SIDEBAR_LIGHT + "; -fx-background-radius: 7; -fx-cursor: hand;");
+                            "-fx-background-color: " + SIDEBAR_LIGHT + "; -fx-text-fill: white; -fx-background-radius: 7; -fx-cursor: hand;");
                 }
             });
             button.setOnMouseExited(e -> {
                 if (!button.getStyle().contains(BLUE)) {
-                    button.setStyle("-fx-background-color: transparent; -fx-background-radius: 7;");
+                    button.setStyle("-fx-background-color: transparent; -fx-text-fill: white; -fx-background-radius: 7;");
                 }
             });
         }
@@ -369,13 +383,75 @@ public class VoterDashboard extends Application {
                 createCustomStatCard("Active Ballots", statValue2, "Pending ballots", "#1464F4"),
                 createCustomStatCard("Current Membership", statValue3, "Active Context", "#7B4DFF"));
 
-        // Fetch real active ballots count from Firestore
+        // Live Winner Alert Banner (Dynamically populated)
+        VBox winnerBanner = new VBox(6);
+        winnerBanner.setVisible(false);
+        winnerBanner.setManaged(false);
+        winnerBanner.setPadding(new Insets(14, 18, 14, 18));
+        winnerBanner.setStyle(
+                "-fx-background-color: linear-gradient(to right, #FEF3C7, #FDE68A);" +
+                        "-fx-background-radius: 10;" +
+                        "-fx-border-color: #F59E0B;" +
+                        "-fx-border-width: 1.5;" +
+                        "-fx-border-radius: 10;");
+
+        HBox winnerHeader = new HBox(8);
+        winnerHeader.setAlignment(Pos.CENTER_LEFT);
+        Label crown = new Label("👑");
+        crown.setStyle("-fx-font-size: 18px;");
+        com.electrovotesuperx.utils.UIAnimationHelper.addPulse(crown);
+
+        Label winnerTitle = new Label("LIVE ELECTION LEADERBOARD UPDATE");
+        winnerTitle.setStyle("-fx-font-weight: 900; -fx-text-fill: #92400E; -fx-font-size: 13px;");
+        winnerHeader.getChildren().addAll(crown, winnerTitle);
+
+        Text winnerText = new Text("Fetching live ballot tallies...");
+        winnerText.setFill(Color.web("#78350F"));
+        winnerText.setFont(Font.font("Segoe UI", FontWeight.BOLD, 13.5));
+        winnerBanner.getChildren().addAll(winnerHeader, winnerText);
+
+        // Fetch real active ballots count and live winners from Firestore
         Thread t = new Thread(() -> {
             try {
                 if (SessionManager.joinCode != null && !SessionManager.joinCode.isBlank()) {
                     List<ElectionData> elecs = ElectionDAO.getElectionsByOrg(SessionManager.joinCode, SessionManager.idToken);
+                    
+                    String topLeadInfo = null;
+                    for (ElectionData el : elecs) {
+                        try {
+                            Map<String, Map<String, Integer>> res = com.electrovotesuperx.dao.AdminDAO.VoteDAO.getResults(el.getId(), SessionManager.idToken);
+                            if (res != null) {
+                                for (Map.Entry<String, Map<String, Integer>> pEntry : res.entrySet()) {
+                                    int maxV = -1;
+                                    String topC = null;
+                                    for (Map.Entry<String, Integer> cv : pEntry.getValue().entrySet()) {
+                                        if (cv.getValue() > maxV) {
+                                            maxV = cv.getValue();
+                                            topC = cv.getKey();
+                                        }
+                                    }
+                                    if (maxV > 0 && topC != null) {
+                                        topLeadInfo = "🏆 " + topC + " is currently leading '" + el.getTitle() + "' (" + pEntry.getKey() + ") with " + maxV + " votes!";
+                                        break;
+                                    }
+                                }
+                            }
+                        } catch (Exception ignored) {}
+                        if (topLeadInfo != null) break;
+                    }
+
+                    final String finalTopLead = topLeadInfo;
+                    final int elecCount = elecs.size();
+
                     Platform.runLater(() -> {
-                        if (statValue2 != null) statValue2.setText(String.valueOf(elecs.size()));
+                        if (statValue2 != null) statValue2.setText(String.valueOf(elecCount));
+                        if (finalTopLead != null) {
+                            winnerText.setText(finalTopLead);
+                            winnerBanner.setVisible(true);
+                            winnerBanner.setManaged(true);
+                            com.electrovotesuperx.utils.UIAnimationHelper.fadeInSlideUp(winnerBanner, 100);
+                            com.electrovotesuperx.utils.UIAnimationHelper.playCelebrationConfetti(content);
+                        }
                     });
                 } else {
                     Platform.runLater(() -> {
@@ -404,7 +480,9 @@ public class VoterDashboard extends Application {
         bannerDesc.setWrappingWidth(900);
 
         banner.getChildren().addAll(bannerTitle, bannerDesc);
-        content.getChildren().addAll(heading, statsRow, banner);
+        com.electrovotesuperx.utils.UIAnimationHelper.addCardHover(banner);
+
+        content.getChildren().addAll(heading, winnerBanner, statsRow, banner);
 
         VBox wrapper = new VBox(scrollPane);
         VBox.setVgrow(scrollPane, Priority.ALWAYS);
@@ -433,6 +511,7 @@ public class VoterDashboard extends Application {
 
         card.getChildren().addAll(titleLbl, valText, subLbl);
         HBox.setHgrow(card, Priority.ALWAYS);
+        com.electrovotesuperx.utils.UIAnimationHelper.addCardHover(card);
         return card;
     }
 

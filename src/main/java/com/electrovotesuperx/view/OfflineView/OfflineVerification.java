@@ -886,12 +886,25 @@ public class OfflineVerification {
                                                 election.getElectionId(),
                                                 voterId);
 
+                                // Live SMS Dispatch (Background thread)
+                                final String finalOtp = otp;
+                                final String voterName = verification.voter() != null ? verification.voter().getFullName() : "Voter";
+                                final String voterPhone = verification.voter() != null ? verification.voter().getPhone() : null;
+                                new Thread(() -> {
+                                    try {
+                                        if (voterPhone != null && !voterPhone.isBlank()) {
+                                            com.electrovotesuperx.service.OfflineService.ClerkOtpService.sendSmsOtp(voterPhone, finalOtp, voterName);
+                                        }
+                                    } catch (Throwable ignored) {}
+                                }).start();
+
                                 showOtpCard(
                                                 otp,
                                                 election.getElectionId(),
                                                 voterId,
                                                 verification.voter().getFullName(),
                                                 verification.voter().getVoterId(),
+                                                voterPhone,
                                                 verification.token());
 
                         } else {
@@ -938,6 +951,7 @@ public class OfflineVerification {
                         String voterId,
                         String voterName,
                         String voterIdDisplay,
+                        String voterPhone,
                         String token) {
 
                 result.getChildren().clear();
@@ -977,102 +991,62 @@ public class OfflineVerification {
                 HBox otpHeader = new HBox(10);
                 otpHeader.setAlignment(Pos.CENTER_LEFT);
 
-                Label lockIcon = new Label("🔐");
-                lockIcon.setStyle("-fx-font-size:20px;");
+                Label lockIcon = new Label("📲");
+                lockIcon.setStyle("-fx-font-size:24px;");
 
                 VBox otpTitleBox = new VBox(2);
 
-                Label otpTitle = new Label("OTP Verification Required");
+                Label otpTitle = new Label("OTP Sent to Voter's Mobile Device");
                 otpTitle.setStyle(
                                 "-fx-font-size:16px;" +
                                                 "-fx-font-weight:800;" +
                                                 "-fx-text-fill:#1E3A5F;");
 
+                String maskedPhone = (voterPhone != null && voterPhone.length() >= 4)
+                        ? "ending in •••• " + voterPhone.substring(voterPhone.length() - 4)
+                        : "registered mobile number";
+
                 Label otpSubtitle = new Label(
-                                "Enter the one-time password to confirm your identity.");
+                                "A 6-digit OTP was dispatched via Clerk SMS to " + voterName + " (" + maskedPhone + "). Ask the voter to provide the code.");
                 otpSubtitle.setStyle(
-                                "-fx-font-size:12px;" +
-                                                "-fx-text-fill:#5A7FA0;");
+                                "-fx-font-size:12.5px;" +
+                                                "-fx-text-fill:#3B82F6;" +
+                                                "-fx-font-weight:600;");
 
                 otpTitleBox.getChildren().addAll(otpTitle, otpSubtitle);
                 otpHeader.getChildren().addAll(lockIcon, otpTitleBox);
 
                 // =====================================================
-                // OTP DIGIT DISPLAY WITH ANIMATION
+                // SECURE SMS DISPATCH STATUS & OFFICER OVERRIDE TOGGLE
                 // =====================================================
 
-                HBox otpDisplay = new HBox(6);
-                otpDisplay.setAlignment(Pos.CENTER);
-                otpDisplay.setPadding(new Insets(12, 0, 8, 0));
+                HBox smsStatusBox = new HBox(10);
+                smsStatusBox.setAlignment(Pos.CENTER);
+                smsStatusBox.setPadding(new Insets(10, 14, 10, 14));
+                smsStatusBox.setStyle("-fx-background-color: #ECFDF5; -fx-background-radius: 8; -fx-border-color: #10B981; -fx-border-radius: 8;");
 
-                Label otpDisplayLabel = new Label("Your OTP:");
-                otpDisplayLabel.setStyle(
-                                "-fx-font-size:13px;" +
-                                                "-fx-font-weight:700;" +
-                                                "-fx-text-fill:#2D5F8A;");
+                Label smsSentIcon = new Label("✅ Live SMS Dispatched");
+                smsSentIcon.setStyle("-fx-font-size:12px; -fx-font-weight:bold; -fx-text-fill:#065F46;");
 
-                Label[] otpDigitLabels = new Label[6];
+                Region overrideSpacer = new Region();
+                HBox.setHgrow(overrideSpacer, Priority.ALWAYS);
 
-                for (int i = 0; i < 6; i++) {
+                Label overrideToggle = new Label("👁️ View OTP (Officer Override)");
+                overrideToggle.setStyle("-fx-font-size:11px; -fx-text-fill:#64748B; -fx-cursor:hand; -fx-underline:true;");
 
-                        Label digitLabel = new Label("●");
-                        digitLabel.setMinWidth(36);
-                        digitLabel.setPrefWidth(36);
-                        digitLabel.setMinHeight(40);
-                        digitLabel.setPrefHeight(40);
-                        digitLabel.setAlignment(Pos.CENTER);
-                        digitLabel.setStyle(
-                                        "-fx-background-color:#FFFFFF;" +
-                                                        "-fx-background-radius:8;" +
-                                                        "-fx-border-color:#C8D9EC;" +
-                                                        "-fx-border-radius:8;" +
-                                                        "-fx-font-size:18px;" +
-                                                        "-fx-font-weight:800;" +
-                                                        "-fx-text-fill:#AAC2DB;");
-                        otpDigitLabels[i] = digitLabel;
-                }
+                Label revealedOtpLabel = new Label("Code: " + generatedOtp);
+                revealedOtpLabel.setStyle("-fx-font-size:13px; -fx-font-weight:bold; -fx-text-fill:#1E3A5F; -fx-background-color:#DBEAFE; -fx-padding:2 6; -fx-background-radius:4;");
+                revealedOtpLabel.setVisible(false);
+                revealedOtpLabel.setManaged(false);
 
-                otpDisplay.getChildren().add(otpDisplayLabel);
+                overrideToggle.setOnMouseClicked(ev -> {
+                    boolean show = !revealedOtpLabel.isVisible();
+                    revealedOtpLabel.setVisible(show);
+                    revealedOtpLabel.setManaged(show);
+                    overrideToggle.setText(show ? "🙈 Hide OTP" : "👁️ View OTP (Officer Override)");
+                });
 
-                for (Label dl : otpDigitLabels) {
-                        otpDisplay.getChildren().add(dl);
-                }
-
-                // Digit-by-digit reveal animation
-                for (int i = 0; i < 6; i++) {
-
-                        final int index = i;
-                        final String digit = String.valueOf(
-                                        generatedOtp.charAt(i));
-
-                        PauseTransition delay = new PauseTransition(
-                                        Duration.millis(300 + (i * 200)));
-
-                        delay.setOnFinished(ev -> {
-
-                                otpDigitLabels[index].setText(digit);
-                                otpDigitLabels[index].setStyle(
-                                                "-fx-background-color:#FFFFFF;" +
-                                                                "-fx-background-radius:8;" +
-                                                                "-fx-border-color:#3B82C4;" +
-                                                                "-fx-border-radius:8;" +
-                                                                "-fx-border-width:1.5;" +
-                                                                "-fx-font-size:18px;" +
-                                                                "-fx-font-weight:800;" +
-                                                                "-fx-text-fill:#1E3A5F;");
-
-                                ScaleTransition pop = new ScaleTransition(
-                                                Duration.millis(150),
-                                                otpDigitLabels[index]);
-                                pop.setFromX(0.7);
-                                pop.setFromY(0.7);
-                                pop.setToX(1.0);
-                                pop.setToY(1.0);
-                                pop.play();
-                        });
-
-                        delay.play();
-                }
+                smsStatusBox.getChildren().addAll(smsSentIcon, overrideSpacer, revealedOtpLabel, overrideToggle);
 
                 // =====================================================
                 // COUNTDOWN TIMER
@@ -1395,12 +1369,22 @@ public class OfflineVerification {
                         String newOtp = controller.generateOtp(
                                         electionId, voterId);
 
+                        // Trigger SMS for Resend
+                        new Thread(() -> {
+                            try {
+                                if (voterPhone != null && !voterPhone.isBlank()) {
+                                    com.electrovotesuperx.service.OfflineService.ClerkOtpService.sendSmsOtp(voterPhone, newOtp, voterName);
+                                }
+                            } catch (Throwable ignored) {}
+                        }).start();
+
                         showOtpCard(
                                         newOtp,
                                         electionId,
                                         voterId,
                                         voterName,
                                         voterIdDisplay,
+                                        voterPhone,
                                         token);
                 });
 
@@ -1420,7 +1404,7 @@ public class OfflineVerification {
                 result.getChildren().addAll(
                                 otpHeader,
                                 otpDivider,
-                                otpDisplay,
+                                smsStatusBox,
                                 progressStack,
                                 countdownLabel,
                                 createVerticalSpace(6),

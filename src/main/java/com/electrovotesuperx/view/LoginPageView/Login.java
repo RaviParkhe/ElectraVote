@@ -4,6 +4,8 @@ import com.electrovotesuperx.config.SessionManager;
 import com.electrovotesuperx.config.firebaseConfig.FirebaseAuthService;
 import com.electrovotesuperx.exception.AuthenticationException;
 import com.electrovotesuperx.dao.OrganizationDAO.FirestoreDAO;
+import com.electrovotesuperx.service.OfflineService.PollingOfficerService;
+import com.electrovotesuperx.service.OfflineService.PollingOfficerService.OfficerApprovalStatus;
 import com.electrovotesuperx.service.RoleDetector;
 import com.electrovotesuperx.utils.Navigation;
 import com.electrovotesuperx.view.Page;
@@ -18,10 +20,12 @@ import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
+import javafx.scene.control.DateCell;
 import javafx.scene.control.DatePicker;
 import javafx.scene.control.Label;
 import javafx.scene.control.PasswordField;
 import javafx.scene.control.TextField;
+import java.time.LocalDate;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.layout.HBox;
@@ -124,7 +128,7 @@ public class Login implements Page {
         signUpEmail.setStyle("-fx-background-radius: 20;");
 
         DatePicker datePicker = new DatePicker();
-        datePicker.setPromptText("Date of Birth");
+        datePicker.setPromptText("Date of Birth (18+ years)");
         datePicker.setPrefWidth(500);
         datePicker.setPrefHeight(40);
         datePicker.setStyle(
@@ -132,6 +136,20 @@ public class Login implements Page {
                         "-fx-border-color: #cccccc;" +
                         "-fx-border-radius: 20;" +
                         "-fx-background-radius: 20;");
+
+        // Restrict DatePicker calendar to only allow selection of dates for users 18
+        // years or older
+        LocalDate maxAllowedDob = LocalDate.now().minusYears(18);
+        datePicker.setDayCellFactory(picker -> new DateCell() {
+            @Override
+            public void updateItem(LocalDate date, boolean empty) {
+                super.updateItem(date, empty);
+                if (date != null && (date.isAfter(maxAllowedDob) || date.isBefore(LocalDate.now().minusYears(120)))) {
+                    setDisable(true);
+                    setStyle("-fx-background-color: #f1f5f9; -fx-text-fill: #94a3b8;");
+                }
+            }
+        });
 
         PasswordField signUpPassword = new PasswordField();
         signUpPassword.setPromptText("Password");
@@ -375,6 +393,22 @@ public class Login implements Page {
                 return;
             }
 
+            LocalDate dob = datePicker.getValue();
+            LocalDate maxDob = LocalDate.now().minusYears(18);
+            if (dob.isAfter(maxDob)) {
+                output.setFill(Color.RED);
+                output.setText("You must be at least 18 years old to register.");
+                shakeButton(signUpSubmitBtn);
+                return;
+            }
+
+            if (dob.isBefore(LocalDate.now().minusYears(120))) {
+                output.setFill(Color.RED);
+                output.setText("Please select a valid Date of Birth.");
+                shakeButton(signUpSubmitBtn);
+                return;
+            }
+
             signUpSubmitBtn.setDisable(true);
             output.setFill(Color.web("#2563EB"));
             output.setText("Creating account...");
@@ -545,13 +579,44 @@ public class Login implements Page {
 
                         } else if ("offline".equals(chosenRole)) {
 
-                            // Authenticated for Offline Mode → OfflineHomePage
-                            SessionManager.idToken = result.getIdToken();
-                            SessionManager.currentRole = "offline";
-                            Navigation.init(loginStage);
-                            OfflineHomePage offline = new OfflineHomePage();
-                            loginStage.setScene(offline.getScene());
-                            loginStage.setMaximized(true);
+                            if (detected == RoleDetector.RoleResult.ADMIN) {
+                                SessionManager.idToken = result.getIdToken();
+                                SessionManager.currentRole = "admin";
+                                Navigation.init(loginStage);
+                                OfflineHomePage offline = new OfflineHomePage();
+                                loginStage.setScene(offline.getScene());
+                                loginStage.setMaximized(true);
+                            } else {
+                                OfficerApprovalStatus status = PollingOfficerService.checkOfficerApprovalStatus(
+                                        result.getLocalId(),
+                                        result.getEmail(),
+                                        result.getIdToken());
+
+                                if (status == OfficerApprovalStatus.APPROVED) {
+                                    SessionManager.idToken = result.getIdToken();
+                                    SessionManager.currentRole = "polling_officer";
+                                    Navigation.init(loginStage);
+                                    OfflineHomePage offline = new OfflineHomePage();
+                                    loginStage.setScene(offline.getScene());
+                                    loginStage.setMaximized(true);
+                                } else if (status == OfficerApprovalStatus.PENDING) {
+                                    output.setFill(Color.web("#d97706"));
+                                    output.setText(
+                                            "Access denied: Your Polling Officer registration is awaiting approval by "
+                                                    + PollingOfficerService.CHIEF_APPROVER_EMAIL + ".");
+                                    shakeButton(signInSubmitBtn);
+                                } else if (status == OfficerApprovalStatus.REJECTED) {
+                                    output.setFill(Color.RED);
+                                    output.setText(
+                                            "Access denied: Your Polling Officer registration was rejected.");
+                                    shakeButton(signInSubmitBtn);
+                                } else {
+                                    output.setFill(Color.RED);
+                                    output.setText(
+                                            "Access denied. You are not registered as a verified Polling Officer. Please register first.");
+                                    shakeButton(signInSubmitBtn);
+                                }
+                            }
 
                         } else {
 

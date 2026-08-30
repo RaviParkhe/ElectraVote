@@ -28,6 +28,12 @@ public class SessionManager {
     // Authenticated User Email (stored from Main Login / Sign In)
     public static String loggedInEmail;
 
+    // Polling Officer Session Data
+    public static String officerUid;
+    public static String officerEmail;
+    public static String officerName;
+    public static String officerStation;
+
     // Voter Session Data
     public static String voterUid;
     public static String voterEmail;
@@ -45,6 +51,10 @@ public class SessionManager {
         adminEmail = null;
         adminName = null;
         loggedInEmail = null;
+        officerUid = null;
+        officerEmail = null;
+        officerName = null;
+        officerStation = null;
         voterUid = null;
         voterEmail = null;
         voterName = null;
@@ -59,5 +69,13 @@ public class SessionManager {
     /** Returns true if an active authenticated session exists */
     public static boolean isLoggedIn() {
         return idToken != null && !idToken.isBlank();
+    }
+
+    public static boolean isAdmin() {
+        return "admin".equalsIgnoreCase(currentRole);
+    }
+
+    public static boolean isPollingOfficer() {
+        return "polling_officer".equalsIgnoreCase(currentRole) || "officer".equalsIgnoreCase(currentRole);
     }
 }

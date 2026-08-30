@@ -120,11 +120,15 @@ public class FirestoreDAO {
                 + "/databases/(default)/documents/Organizations/"
                 + joinCode;
 
-        HttpRequest request = HttpRequest.newBuilder()
+        HttpRequest.Builder builder = HttpRequest.newBuilder()
                 .uri(URI.create(url))
-                .header("Authorization", "Bearer " + idToken)
-                .GET()
-                .build();
+                .GET();
+
+        if (idToken != null && !idToken.isBlank()) {
+            builder.header("Authorization", "Bearer " + idToken);
+        }
+
+        HttpRequest request = builder.build();
 
         HttpResponse<String> response;
         try {
@@ -155,11 +159,15 @@ public class FirestoreDAO {
                 + "/databases/(default)/documents/Users/"
                 + uid;
 
-        HttpRequest request = HttpRequest.newBuilder()
+        HttpRequest.Builder builder = HttpRequest.newBuilder()
                 .uri(URI.create(url))
-                .header("Authorization", "Bearer " + idToken)
-                .GET()
-                .build();
+                .GET();
+
+        if (idToken != null && !idToken.isBlank()) {
+            builder.header("Authorization", "Bearer " + idToken);
+        }
+
+        HttpRequest request = builder.build();
 
         HttpResponse<String> response;
         try {
@@ -175,6 +183,219 @@ public class FirestoreDAO {
         return JsonParser.parseString(response.body())
                 .getAsJsonObject()
                 .getAsJsonObject("fields");
+    }
+
+    // =====================================================
+    // SAVE POLLING OFFICER
+    // =====================================================
+
+    public static boolean savePollingOfficer(
+            String uid,
+            String name,
+            String email,
+            String stationName,
+            String phone,
+            String status,
+            String approverEmail,
+            String approvalPin,
+            String idToken) throws FirestoreException {
+
+        String url = "https://firestore.googleapis.com/v1/projects/"
+                + PROJECT_ID
+                + "/databases/(default)/documents/PollingOfficers/"
+                + uid;
+
+        JsonObject fields = new JsonObject();
+        fields.add("uid", stringValue(uid));
+        fields.add("name", stringValue(name));
+        fields.add("email", stringValue(email));
+        fields.add("stationName", stringValue(stationName));
+        fields.add("phone", stringValue(phone));
+        fields.add("role", stringValue("POLLING_OFFICER"));
+        fields.add("status", stringValue(status));
+        fields.add("approverEmail", stringValue(approverEmail));
+        fields.add("approvalPin", stringValue(approvalPin));
+        fields.add("createdAt", stringValue(java.time.Instant.now().toString()));
+
+        JsonObject body = new JsonObject();
+        body.add("fields", fields);
+
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(url))
+                .header("Authorization", "Bearer " + idToken)
+                .header("Content-Type", "application/json")
+                .method("PATCH",
+                        HttpRequest.BodyPublishers.ofString(body.toString(),
+                                StandardCharsets.UTF_8))
+                .build();
+
+        try {
+            HttpResponse<String> response = CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+            System.out.println("[FirestoreDAO] PollingOfficers write status: " + response.statusCode() + " response: " + response.body());
+
+            // Also mirror to Users/{uid}
+            String usersUrl = "https://firestore.googleapis.com/v1/projects/"
+                    + PROJECT_ID
+                    + "/databases/(default)/documents/Users/"
+                    + uid;
+            HttpRequest userReq = HttpRequest.newBuilder()
+                    .uri(URI.create(usersUrl))
+                    .header("Authorization", "Bearer " + idToken)
+                    .header("Content-Type", "application/json")
+                    .method("PATCH", HttpRequest.BodyPublishers.ofString(body.toString(), StandardCharsets.UTF_8))
+                    .build();
+            CLIENT.send(userReq, HttpResponse.BodyHandlers.ofString());
+
+            return response.statusCode() == 200 || response.statusCode() == 201;
+        } catch (IOException | InterruptedException e) {
+            throw new FirestoreException("Unable to save polling officer.", e);
+        }
+    }
+
+    // =====================================================
+    // UPDATE POLLING OFFICER STATUS
+    // =====================================================
+
+    public static boolean updateOfficerStatus(
+            String uid,
+            String status,
+            String idToken) throws FirestoreException {
+
+        String url = "https://firestore.googleapis.com/v1/projects/"
+                + PROJECT_ID
+                + "/databases/(default)/documents/PollingOfficers/"
+                + uid
+                + "?updateMask.fieldPaths=status";
+
+        JsonObject fields = new JsonObject();
+        fields.add("status", stringValue(status));
+
+        JsonObject body = new JsonObject();
+        body.add("fields", fields);
+
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(url))
+                .header("Authorization", "Bearer " + idToken)
+                .header("Content-Type", "application/json")
+                .method("PATCH", HttpRequest.BodyPublishers.ofString(body.toString(), StandardCharsets.UTF_8))
+                .build();
+
+        try {
+            HttpResponse<String> response = CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+            System.out.println("[FirestoreDAO] UpdateOfficerStatus response: " + response.statusCode());
+            return response.statusCode() == 200;
+        } catch (Exception e) {
+            throw new FirestoreException("Unable to update officer status.", e);
+        }
+    }
+
+    // =====================================================
+    // GET POLLING OFFICER
+    // =====================================================
+
+    public static JsonObject getPollingOfficer(
+            String uid,
+            String idToken) throws FirestoreException {
+
+        String url = "https://firestore.googleapis.com/v1/projects/"
+                + PROJECT_ID
+                + "/databases/(default)/documents/PollingOfficers/"
+                + uid;
+
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(url))
+                .header("Authorization", "Bearer " + idToken)
+                .GET()
+                .build();
+
+        HttpResponse<String> response;
+        try {
+            response = CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+        } catch (IOException | InterruptedException e) {
+            throw new FirestoreException("Unable to retrieve polling officer.", e);
+        }
+
+        if (response.statusCode() != 200) {
+            return null;
+        }
+
+        return JsonParser.parseString(response.body())
+                .getAsJsonObject()
+                .getAsJsonObject("fields");
+    }
+
+    // =====================================================
+    // QUEUE APPROVAL EMAIL (FIRESTORE MAIL TRIGGER)
+    // =====================================================
+
+    public static boolean queueApprovalEmail(
+            String toEmail,
+            String officerName,
+            String officerEmail,
+            String stationName,
+            String officerPhone,
+            String idToken) {
+
+        try {
+            String url = "https://firestore.googleapis.com/v1/projects/"
+                    + PROJECT_ID
+                    + "/databases/(default)/documents/mail";
+
+            JsonObject fields = new JsonObject();
+
+            // to: ["ravi.parkhe2006@gmail.com"]
+            JsonObject arrayVal = new JsonObject();
+            com.google.gson.JsonArray values = new com.google.gson.JsonArray();
+            values.add(stringValue(toEmail));
+            arrayVal.add("values", values);
+            JsonObject toField = new JsonObject();
+            toField.add("arrayValue", arrayVal);
+            fields.add("to", toField);
+
+            // message: { subject: "...", text: "...", html: "..." }
+            JsonObject msgMap = new JsonObject();
+            JsonObject msgFields = new JsonObject();
+            msgFields.add("subject", stringValue("ElectraVote: New Polling Officer Approval Request"));
+            msgFields.add("text", stringValue(
+                    "A new Polling Officer has registered for the Offline Voting System and is awaiting your approval.\n\n"
+                            + "Officer Name   : " + officerName + "\n"
+                            + "Officer Email  : " + officerEmail + "\n"
+                            + "Station Name   : " + stationName + "\n"
+                            + "Phone Number   : " + officerPhone + "\n\n"
+                            + "Please approve this officer in your ElectraVote Admin / Firebase Console to grant Offline Voting access."));
+            msgFields.add("html", stringValue(
+                    "<div style='font-family: Arial, sans-serif; color: #1e293b;'>"
+                            + "<h2 style='color: #059669;'>ElectraVote Polling Officer Approval Request</h2>"
+                            + "<p>A new Polling Officer has registered for the Offline Voting System and is awaiting your approval:</p>"
+                            + "<table style='border-collapse: collapse; margin: 15px 0;'>"
+                            + "<tr><td style='padding: 6px 12px; font-weight: bold;'>Officer Name:</td><td style='padding: 6px 12px;'>" + officerName + "</td></tr>"
+                            + "<tr><td style='padding: 6px 12px; font-weight: bold;'>Officer Email:</td><td style='padding: 6px 12px;'>" + officerEmail + "</td></tr>"
+                            + "<tr><td style='padding: 6px 12px; font-weight: bold;'>Station Name:</td><td style='padding: 6px 12px;'>" + stationName + "</td></tr>"
+                            + "<tr><td style='padding: 6px 12px; font-weight: bold;'>Phone:</td><td style='padding: 6px 12px;'>" + officerPhone + "</td></tr>"
+                            + "</table>"
+                            + "<p>Please review and set status to <strong>APPROVED</strong> to grant offline terminal access.</p>"
+                            + "</div>"));
+            msgMap.add("fields", msgFields);
+            JsonObject msgField = new JsonObject();
+            msgField.add("mapValue", msgMap);
+            fields.add("message", msgField);
+
+            JsonObject body = new JsonObject();
+            body.add("fields", fields);
+
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(url))
+                    .header("Authorization", "Bearer " + idToken)
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(body.toString(), StandardCharsets.UTF_8))
+                    .build();
+
+            HttpResponse<String> response = CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+            return response.statusCode() == 200 || response.statusCode() == 201;
+        } catch (Exception e) {
+            System.err.println("[FirestoreDAO] Error queueing email: " + e.getMessage());
+            return false;
+        }
     }
 
     // =====================================================

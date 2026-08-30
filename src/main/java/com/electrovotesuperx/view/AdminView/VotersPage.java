@@ -54,19 +54,25 @@ public class VotersPage extends VBox {
 
         HBox header = buildHeader();
         HBox filterBar = buildFilterBar();
+
+        HBox mainColumns = new HBox(16);
+        mainColumns.setAlignment(Pos.TOP_CENTER);
+        VBox.setVgrow(mainColumns, Priority.ALWAYS);
+
         VBox requestSection = buildRequestSection();
         VBox approvedSection = buildApprovedSection();
+
+        HBox.setHgrow(requestSection, Priority.ALWAYS);
+        HBox.setHgrow(approvedSection, Priority.ALWAYS);
+        requestSection.setMaxWidth(Double.MAX_VALUE);
+        approvedSection.setMaxWidth(Double.MAX_VALUE);
+
+        mainColumns.getChildren().addAll(requestSection, approvedSection);
 
         getChildren().addAll(
                 header,
                 filterBar,
-                requestSection,
-                new Separator() {
-                    {
-                        setStyle("-fx-background-color: #cbd5e1; -fx-opacity: 0.6;");
-                    }
-                },
-                approvedSection);
+                mainColumns);
 
         fetchVotersFromFirebase();
     }
@@ -167,7 +173,8 @@ public class VotersPage extends VBox {
     // 3. REQUEST LIST SECTION
     // =========================================================
     private VBox buildRequestSection() {
-        VBox section = new VBox(8);
+        VBox section = new VBox(10);
+        VBox.setVgrow(section, Priority.ALWAYS);
 
         HBox requestHeader = new HBox();
         requestHeader.setAlignment(Pos.CENTER_LEFT);
@@ -185,8 +192,9 @@ public class VotersPage extends VBox {
 
         ScrollPane requestScroll = new ScrollPane(requestList);
         requestScroll.setFitToWidth(true);
-        requestScroll.setPrefHeight(260);
+        requestScroll.setPrefHeight(520);
         requestScroll.setStyle("-fx-background-color: transparent; -fx-background: transparent; -fx-padding: 0;");
+        VBox.setVgrow(requestScroll, Priority.ALWAYS);
 
         section.getChildren().addAll(requestHeader, requestScroll);
         return section;
@@ -196,7 +204,8 @@ public class VotersPage extends VBox {
     // 4. APPROVED VOTERS SECTION
     // =========================================================
     private VBox buildApprovedSection() {
-        VBox section = new VBox(8);
+        VBox section = new VBox(10);
+        VBox.setVgrow(section, Priority.ALWAYS);
 
         HBox approvedHeader = new HBox();
         approvedHeader.setAlignment(Pos.CENTER_LEFT);
@@ -215,8 +224,9 @@ public class VotersPage extends VBox {
 
         ScrollPane approvedScroll = new ScrollPane(approvedVoterList);
         approvedScroll.setFitToWidth(true);
-        approvedScroll.setPrefHeight(260);
+        approvedScroll.setPrefHeight(520);
         approvedScroll.setStyle("-fx-background-color: transparent; -fx-background: transparent; -fx-padding: 0;");
+        VBox.setVgrow(approvedScroll, Priority.ALWAYS);
 
         section.getChildren().addAll(approvedHeader, approvedScroll);
         return section;

@@ -24,16 +24,37 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import javafx.application.Platform;
 import com.electrovotesuperx.config.SessionManager;
+import com.electrovotesuperx.config.firebaseConfig.FirebaseDatabaseService;
 import com.electrovotesuperx.controller.AdminController.ElectionController;
+import com.electrovotesuperx.dao.AdminDAO.VoteDAO;
 import com.electrovotesuperx.model.AdminModel.ElectionData;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
 
 public class AdminDashboard extends Application {
 
     public static Stage AdminDashboardStage;
     public static Scene AdminDashboardScene;
+
+    public static class DashboardStats {
+        public int totalElections = 0;
+        public int activeElections = 0;
+        public int totalVoters = 0;
+        public int acceptedVoters = 0;
+        public int pendingVoters = 0;
+        public int totalBallotsCast = 0;
+        public double overallTurnout = 0.0;
+        public List<ElectionData> elections = new ArrayList<>();
+        public Map<String, Integer> ballotsPerElection = new HashMap<>();
+    }
+
+    private static DashboardStats latestStats = new DashboardStats();
 
     private static final String FONT = "-fx-font-family: 'Segoe UI', 'Inter', -apple-system, sans-serif;";
 
@@ -102,13 +123,16 @@ public class AdminDashboard extends Application {
         Button votersBtn = new Button("👥  Voters");
         Button candidatesBtn = new Button("👤  Candidates");
         Button liveVotingBtn = new Button("📊  Live Voting");
+        Button quickPollBtn = new Button("⚡  Quick Polls");
         Button resultsBtn = new Button("🏆  Results");
         Button reportsBtn = new Button("📑  Reports");
+        Button aiGovernanceBtn = new Button("🤖  AI Governance");
         Button settingsBtn = new Button("⚙  Settings");
         Button logoutBtn = new Button("🚪  Logout");
 
-        Button[] buttons = { dashboardBtn, electionsBtn, votersBtn, candidatesBtn, liveVotingBtn, resultsBtn,
-                reportsBtn, settingsBtn, logoutBtn };
+        Button[] buttons = { dashboardBtn, electionsBtn, votersBtn, candidatesBtn, liveVotingBtn, quickPollBtn,
+                resultsBtn,
+                reportsBtn, aiGovernanceBtn, settingsBtn, logoutBtn };
 
         for (Button btn : buttons) {
             btn.setMaxWidth(Double.MAX_VALUE);
@@ -142,7 +166,7 @@ public class AdminDashboard extends Application {
                     }
                 },
                 dashboardBtn, electionsBtn, votersBtn, candidatesBtn,
-                liveVotingBtn, resultsBtn, reportsBtn, settingsBtn,
+                liveVotingBtn, quickPollBtn, resultsBtn, reportsBtn, aiGovernanceBtn, settingsBtn,
                 sidebarSpacer, logoutBtn);
 
         // =========================================================================
@@ -246,6 +270,8 @@ public class AdminDashboard extends Application {
         // 3. CENTER CONTENT
         // =========================================================================
         BorderPane center = new BorderPane();
+        center.setStyle(
+                "-fx-background-color: linear-gradient(to bottom right, #f8fafc 0%, #eef2ff 35%, #e0e7ff 70%, #f5f3ff 100%);");
         center.setTop(topBar);
 
         ElectionPage electionPage = new ElectionPage();
@@ -256,8 +282,9 @@ public class AdminDashboard extends Application {
 
         ScrollPane dashboardScroll = new ScrollPane();
         dashboardScroll.setFitToWidth(true);
+        dashboardScroll.setFitToHeight(true);
         dashboardScroll.setStyle(
-                "-fx-background-color: transparent; -fx-background: linear-gradient(to bottom right, #f1f5f9 0%, #e0e7ff 40%, #ede9fe 75%, #fce7f3 100%);");
+                "-fx-background-color: transparent; -fx-background: transparent;");
 
         VBox content = buildModernCenterContent(stage);
         dashboardScroll.setContent(content);
@@ -293,6 +320,17 @@ public class AdminDashboard extends Application {
             center.setCenter(liveVotingPage);
         });
 
+        quickPollBtn.setOnAction(e -> {
+            setActiveNav(quickPollBtn, buttons);
+            com.electrovotesuperx.view.QuickPollView.QuickPoll qp = new com.electrovotesuperx.view.QuickPollView.QuickPoll();
+            Scene prevScene = AdminDashboardStage.getScene();
+            AdminDashboardStage.setScene(qp.getScene(() -> {
+                AdminDashboardStage.setScene(prevScene);
+                AdminDashboardStage.setMaximized(true);
+            }));
+            AdminDashboardStage.setMaximized(true);
+        });
+
         resultsBtn.setOnAction(e -> {
             setActiveNav(resultsBtn, buttons);
             center.setCenter(resultPage);
@@ -303,20 +341,34 @@ public class AdminDashboard extends Application {
             center.setCenter(new ReportsPage());
         });
 
+        aiGovernanceBtn.setOnAction(e -> {
+            setActiveNav(aiGovernanceBtn, buttons);
+            center.setCenter(new AIGovernancePage());
+        });
+
         settingsBtn.setOnAction(e -> {
             setActiveNav(settingsBtn, buttons);
             center.setCenter(new SettingsPage());
         });
 
         logoutBtn.setOnAction(e -> {
+            System.out.println("Admin logging out...");
             com.electrovotesuperx.config.SessionManager.clearSession();
-            com.electrovotesuperx.view.HomePageView.HomePage home = new com.electrovotesuperx.view.HomePageView.HomePage(stage);
-            Scene homeScene = home.getScene(() -> {
-                stage.close();
-            });
-            stage.setScene(homeScene);
-            stage.setMaximized(true);
-            stage.show();
+            Stage currentStage = stage != null ? stage
+                    : (AdminDashboardStage != null ? AdminDashboardStage
+                            : com.electrovotesuperx.utils.Navigation.getStage());
+            if (currentStage != null) {
+                com.electrovotesuperx.view.LoginPageView.Login.loginStage = currentStage;
+                com.electrovotesuperx.utils.Navigation.init(currentStage);
+                com.electrovotesuperx.view.LoginPageView.Login login = new com.electrovotesuperx.view.LoginPageView.Login();
+                Scene loginScene = login.getScene(() -> {
+                    currentStage.close();
+                });
+                currentStage.setTitle("ElectraVote");
+                currentStage.setScene(loginScene);
+                currentStage.setMaximized(true);
+                currentStage.show();
+            }
         });
 
         Scene scene = new Scene(root);
@@ -338,6 +390,7 @@ public class AdminDashboard extends Application {
     private VBox buildModernCenterContent(Stage currentStage) {
         VBox content = new VBox(16);
         content.setPadding(new Insets(20, 26, 26, 26));
+        content.setStyle("-fx-background-color: transparent;");
 
         // 1. Hero Organization Status Banner (Slimmed Down)
         HBox heroBanner = new HBox(16);
@@ -353,7 +406,7 @@ public class AdminDashboard extends Application {
         VBox heroText = new VBox(3);
         String orgTitle = SessionManager.organizationName != null && !SessionManager.organizationName.isBlank()
                 ? SessionManager.organizationName
-                : "ABC College";
+                : "Organization Portal";
         Label heroTitle = new Label("Welcome back to " + orgTitle + " Portal");
         heroTitle.setStyle(FONT + "-fx-font-size: 17px; -fx-font-weight: 900; -fx-text-fill: #ffffff;");
         Label heroSub = new Label(
@@ -379,18 +432,31 @@ public class AdminDashboard extends Application {
 
         heroBanner.getChildren().addAll(heroText, heroSpacer, quickAuditBtn);
 
-        // 2. Metric Cards (Compact 85px Height)
+        // 2. Metric Cards (Compact 85px Height - Fully Dynamic Labels)
         HBox metricsGrid = new HBox(12);
 
         Label electionsValLabel = new Label("0");
+        Label electionsSubLabel = new Label("Configured Ballots");
         VBox cardElections = buildColorfulMetricCardDynamic("🗳", "TOTAL ELECTIONS", electionsValLabel,
-                "Configured Ballots", "#1d4ed8",
+                electionsSubLabel, "#1d4ed8",
                 "#eff6ff", "#3b82f6", "#93c5fd");
-        VBox cardVoters = buildColorfulMetricCard("👥", "TOTAL VOTERS", "4,582", "98.4% Active Members", "#0f172a",
+
+        Label votersValLabel = new Label("0");
+        Label votersSubLabel = new Label("0 Active Members");
+        VBox cardVoters = buildColorfulMetricCardDynamic("👥", "TOTAL VOTERS", votersValLabel,
+                votersSubLabel, "#0f172a",
                 "#f8fafc", "#475569", "#cbd5e1");
-        VBox cardVotes = buildColorfulMetricCard("🔒", "VOTES CAST", "2,947", "Zero-Knowledge Stored", "#047857",
+
+        Label votesValLabel = new Label("0");
+        Label votesSubLabel = new Label("Zero-Knowledge Stored");
+        VBox cardVotes = buildColorfulMetricCardDynamic("🔒", "VOTES CAST", votesValLabel,
+                votesSubLabel, "#047857",
                 "#ecfdf5", "#10b981", "#6ee7b7");
-        VBox cardTurnout = buildColorfulMetricCard("📈", "OVERALL TURNOUT", "64.28%", "Target: 70.00%", "#6d28d9",
+
+        Label turnoutValLabel = new Label("0.00%");
+        Label turnoutSubLabel = new Label("Target: 100.00%");
+        VBox cardTurnout = buildColorfulMetricCardDynamic("📈", "OVERALL TURNOUT", turnoutValLabel,
+                turnoutSubLabel, "#6d28d9",
                 "#f5f3ff", "#8b5cf6", "#c4b5fd");
 
         HBox.setHgrow(cardElections, Priority.ALWAYS);
@@ -415,22 +481,144 @@ public class AdminDashboard extends Application {
         HBox.setHgrow(ongoingCard, Priority.ALWAYS);
         lowerGrid.getChildren().addAll(electionOverviewCard, ongoingCard);
 
-        // Load dynamic data from Firestore in background
-        refreshDashboardData(electionsValLabel, electionNamesList, activeList);
+        // Load dynamic real-time data from Firebase & Firestore in background
+        refreshDashboardData(
+                electionsValLabel, electionsSubLabel,
+                votersValLabel, votersSubLabel,
+                votesValLabel, votesSubLabel,
+                turnoutValLabel, turnoutSubLabel,
+                electionNamesList, activeList);
 
         content.getChildren().addAll(heroBanner, metricsGrid, lowerGrid);
         return content;
     }
 
-    private void refreshDashboardData(Label electionsValLabel, VBox electionNamesList, VBox activeList) {
+    private void refreshDashboardData(
+            Label electionsValLabel, Label electionsSubLabel,
+            Label votersValLabel, Label votersSubLabel,
+            Label votesValLabel, Label votesSubLabel,
+            Label turnoutValLabel, Label turnoutSubLabel,
+            VBox electionNamesList, VBox activeList) {
+
         Thread t = new Thread(() -> {
+            DashboardStats stats = new DashboardStats();
+            String joinCode = SessionManager.joinCode;
+            String idToken = SessionManager.idToken;
+
+            // 1. Fetch elections for the organization
             List<ElectionData> elections = ElectionController.loadElections();
+            if (elections != null) {
+                stats.elections = elections;
+                stats.totalElections = elections.size();
+            }
+
+            // 2. Fetch registered voters / members from Firebase Realtime Database
+            if (joinCode != null && !joinCode.isBlank()) {
+                try {
+                    JsonObject membersJson = FirebaseDatabaseService.getAllMembers(joinCode, idToken);
+                    if (membersJson != null) {
+                        for (Map.Entry<String, JsonElement> entry : membersJson.entrySet()) {
+                            if (entry.getValue().isJsonObject()) {
+                                JsonObject m = entry.getValue().getAsJsonObject();
+                                String role = m.has("role") && !m.get("role").isJsonNull() ? m.get("role").getAsString()
+                                        : "VOTER";
+                                if ("VOTER".equalsIgnoreCase(role)) {
+                                    stats.totalVoters++;
+                                    String status = m.has("status") && !m.get("status").isJsonNull()
+                                            ? m.get("status").getAsString()
+                                            : "PENDING";
+                                    if ("ACCEPTED".equalsIgnoreCase(status)) {
+                                        stats.acceptedVoters++;
+                                    } else if ("PENDING".equalsIgnoreCase(status)) {
+                                        stats.pendingVoters++;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } catch (Exception ex) {
+                    System.err.println("[AdminDashboard] Error fetching members: " + ex.getMessage());
+                }
+            }
+
+            // 3. Fetch votes results for each election
+            int totalBallots = 0;
+            for (ElectionData e : stats.elections) {
+                String status = e.getStatus() != null ? e.getStatus() : "Draft";
+                if ("Active".equalsIgnoreCase(status) || "Live".equalsIgnoreCase(status)) {
+                    stats.activeElections++;
+                }
+
+                int electionBallots = 0;
+                try {
+                    Map<String, Map<String, Integer>> results = VoteDAO.getResults(e.getId(), idToken);
+                    if (results != null && !results.isEmpty()) {
+                        for (Map<String, Integer> candMap : results.values()) {
+                            int posVotes = 0;
+                            for (int cnt : candMap.values()) {
+                                posVotes += cnt;
+                            }
+                            if (posVotes > electionBallots) {
+                                electionBallots = posVotes;
+                            }
+                        }
+                    }
+                } catch (Exception ex) {
+                    System.err.println(
+                            "[AdminDashboard] Error fetching votes for election " + e.getId() + ": " + ex.getMessage());
+                }
+
+                stats.ballotsPerElection.put(e.getId(), electionBallots);
+                totalBallots += electionBallots;
+            }
+            stats.totalBallotsCast = totalBallots;
+
+            // 4. Calculate Turnout Rate
+            int eligibleVoters = stats.acceptedVoters > 0 ? stats.acceptedVoters : stats.totalVoters;
+            int totalOpportunities = eligibleVoters * Math.max(1, stats.totalElections);
+            if (totalOpportunities > 0 && stats.totalBallotsCast > 0) {
+                stats.overallTurnout = Math.min(100.0, (stats.totalBallotsCast * 100.0) / totalOpportunities);
+            } else {
+                stats.overallTurnout = 0.0;
+            }
+
+            latestStats = stats;
+
+            // 5. Update JavaFX UI
             Platform.runLater(() -> {
-                electionsValLabel.setText(String.valueOf(elections.size()));
+                electionsValLabel.setText(String.valueOf(stats.totalElections));
+                if (stats.activeElections > 0) {
+                    electionsSubLabel.setText(stats.activeElections + " Active • Configured Ballots");
+                } else {
+                    electionsSubLabel.setText("Configured Ballots");
+                }
+
+                votersValLabel.setText(String.format("%,d", stats.totalVoters));
+                if (stats.totalVoters > 0) {
+                    double activePct = (stats.acceptedVoters * 100.0) / stats.totalVoters;
+                    votersSubLabel.setText(String.format("%.1f%% Active Members", activePct));
+                } else {
+                    votersSubLabel.setText("0 Active Members");
+                }
+
+                votesValLabel.setText(String.format("%,d", stats.totalBallotsCast));
+                if (stats.totalBallotsCast > 0) {
+                    votesSubLabel.setText("Zero-Knowledge Stored");
+                } else {
+                    votesSubLabel.setText("No Ballots Cast Yet");
+                }
+
+                turnoutValLabel.setText(String.format("%.2f%%", stats.overallTurnout));
+                if (totalOpportunities > 0) {
+                    turnoutSubLabel.setText(stats.totalBallotsCast + " of " + totalOpportunities + " Expected");
+                } else {
+                    turnoutSubLabel.setText("Target: 100.00%");
+                }
+
                 electionNamesList.getChildren().clear();
                 activeList.getChildren().clear();
 
-                if (elections.isEmpty()) {
+                if (stats.elections.isEmpty()) {
                     Label empty = new Label("No elections created yet. Use '🗳 Elections' tab to create.");
                     empty.setStyle(FONT + "-fx-text-fill: #64748b; -fx-font-size: 11.5px; -fx-padding: 10;");
                     electionNamesList.getChildren().add(empty);
@@ -440,7 +628,7 @@ public class AdminDashboard extends Application {
                     activeList.getChildren().add(emptyActive);
                 } else {
                     int activeCount = 0;
-                    for (ElectionData e : elections) {
+                    for (ElectionData e : stats.elections) {
                         String status = e.getStatus() != null ? e.getStatus() : "Draft";
                         String accentColor = "#2563eb";
                         String bgAccent = "#eff6ff";
@@ -451,9 +639,14 @@ public class AdminDashboard extends Application {
                             bgAccent = "#ecfdf5";
                             borderColor = "#a7f3d0";
                             activeCount++;
+                            int eCast = stats.ballotsPerElection.getOrDefault(e.getId(), 0);
+                            String metaStr = (e.getStartDateTime() != null && !e.getStartDateTime().isBlank())
+                                    ? ("Schedule: " + e.getStartDateTime() + " - " + e.getEndDateTime() + " • " + eCast
+                                            + " Cast")
+                                    : (eCast + " Ballots Cast");
                             activeList.getChildren().add(buildColorfulOngoingRow(
                                     e.getTitle(),
-                                    "Schedule: " + e.getStartDateTime() + " - " + e.getEndDateTime(),
+                                    metaStr,
                                     "LIVE",
                                     "#059669",
                                     "#ecfdf5",
@@ -484,7 +677,7 @@ public class AdminDashboard extends Application {
         t.start();
     }
 
-    private VBox buildColorfulMetricCardDynamic(String icon, String title, Label valLabel, String sub,
+    private VBox buildColorfulMetricCardDynamic(String icon, String title, Label valLabel, Label subLabel,
             String themeColor,
             String iconBg, String borderBase, String borderAccent) {
         VBox card = new VBox(6);
@@ -512,17 +705,17 @@ public class AdminDashboard extends Application {
 
         valLabel.setStyle(FONT + "-fx-font-size: 20px; -fx-font-weight: 900; -fx-text-fill: " + themeColor + ";");
 
-        Label s = new Label(sub);
-        s.setStyle(FONT + "-fx-font-size: 10px; -fx-text-fill: #475569; -fx-font-weight: 700;");
+        subLabel.setStyle(FONT + "-fx-font-size: 10px; -fx-text-fill: #475569; -fx-font-weight: 700;");
 
-        card.getChildren().addAll(header, valLabel, s);
+        card.getChildren().addAll(header, valLabel, subLabel);
         return card;
     }
 
     private VBox buildColorfulMetricCard(String icon, String title, String val, String sub, String themeColor,
             String iconBg, String borderBase, String borderAccent) {
         Label v = new Label(val);
-        return buildColorfulMetricCardDynamic(icon, title, v, sub, themeColor, iconBg, borderBase, borderAccent);
+        Label s = new Label(sub);
+        return buildColorfulMetricCardDynamic(icon, title, v, s, themeColor, iconBg, borderBase, borderAccent);
     }
 
     private VBox buildScrollableElectionOverviewCard(VBox electionNamesList) {
@@ -645,7 +838,7 @@ public class AdminDashboard extends Application {
     }
 
     // =========================================================================
-    // TURNOUT REPORT MODAL
+    // TURNOUT REPORT MODAL (Dynamic Real-Time Data)
     // =========================================================================
     private void showTurnoutReportModal(Stage ownerStage) {
         Dialog<ButtonType> dialog = new Dialog<>();
@@ -657,7 +850,7 @@ public class AdminDashboard extends Application {
 
         VBox modalContent = new VBox(14);
         modalContent.setPadding(new Insets(20));
-        modalContent.setPrefWidth(600);
+        modalContent.setPrefWidth(640);
         modalContent.setStyle("-fx-background-color: #ffffff; " + FONT);
 
         HBox reportHeader = new HBox(12);
@@ -668,11 +861,16 @@ public class AdminDashboard extends Application {
         reportIcon.setStyle(FONT + "-fx-font-size: 15px;");
         StackPane iconStack = new StackPane(reportIconBg, reportIcon);
 
+        String displayOrgName = SessionManager.organizationName != null && !SessionManager.organizationName.isBlank()
+                ? SessionManager.organizationName
+                : "Organization Portal";
+
         VBox titleArea = new VBox(2);
         Label title = new Label("Official Online Turnout Audit Summary");
         title.setStyle(FONT + "-fx-font-size: 16px; -fx-font-weight: 800; -fx-text-fill: #0f172a;");
         DateTimeFormatter dtf = DateTimeFormatter.ofPattern("dd MMM yyyy, HH:mm:ss");
-        Label timestamp = new Label("Generated: " + LocalDateTime.now().format(dtf) + "  •  Tenant: ABC College");
+        String formattedTimestamp = LocalDateTime.now().format(dtf);
+        Label timestamp = new Label("Generated: " + formattedTimestamp + "  •  Tenant: " + displayOrgName);
         timestamp.setStyle(FONT + "-fx-font-size: 11px; -fx-text-fill: #64748b; -fx-font-weight: 600;");
         titleArea.getChildren().addAll(title, timestamp);
 
@@ -685,12 +883,19 @@ public class AdminDashboard extends Application {
 
         reportHeader.getChildren().addAll(iconStack, titleArea, headerSpacer, verifiedTag);
 
+        int registered = latestStats.totalVoters;
+        int cast = latestStats.totalBallotsCast;
+        int eligible = latestStats.acceptedVoters > 0 ? latestStats.acceptedVoters : latestStats.totalVoters;
+        int totalExpected = eligible * Math.max(1, latestStats.totalElections);
+        int remaining = Math.max(0, totalExpected - cast);
+        double turnout = latestStats.overallTurnout;
+
         HBox metricStrip = new HBox(8);
         metricStrip.getChildren().addAll(
-                createReportMetricBadge("TOTAL REGISTERED", "4,582", "#0f172a", "#f8fafc"),
-                createReportMetricBadge("BALLOTS CAST", "2,947", "#2563eb", "#eff6ff"),
-                createReportMetricBadge("REMAINING", "1,635", "#d97706", "#fffbeb"),
-                createReportMetricBadge("OVERALL TURNOUT", "64.28%", "#059669", "#ecfdf5"));
+                createReportMetricBadge("TOTAL REGISTERED", String.format("%,d", registered), "#0f172a", "#f8fafc"),
+                createReportMetricBadge("BALLOTS CAST", String.format("%,d", cast), "#2563eb", "#eff6ff"),
+                createReportMetricBadge("REMAINING", String.format("%,d", remaining), "#d97706", "#fffbeb"),
+                createReportMetricBadge("OVERALL TURNOUT", String.format("%.2f%%", turnout), "#059669", "#ecfdf5"));
 
         VBox privacyStandardBox = new VBox(6);
         privacyStandardBox.setPadding(new Insets(10, 14, 10, 14));
@@ -721,11 +926,24 @@ public class AdminDashboard extends Application {
         breakdownTitle.setStyle(FONT + "-fx-font-size: 13px; -fx-font-weight: 800; -fx-text-fill: #0f172a;");
 
         VBox breakdownList = new VBox(6);
-        breakdownList.getChildren().addAll(
-                createModernBreakdownRow("Student Council General Election 2026", 1286, 2000, 0.6428, "#2563eb"),
-                createModernBreakdownRow("Cultural Affairs Committee Election", 722, 1500, 0.4813, "#7c3aed"),
-                createModernBreakdownRow("Sports & Athletics Committee Election", 443, 1200, 0.3691, "#059669"),
-                createModernBreakdownRow("Faculty Executive Council Poll", 496, 882, 0.5623, "#d97706"));
+        String[] colors = { "#2563eb", "#7c3aed", "#059669", "#d97706", "#dc2626", "#0284c7" };
+        if (latestStats.elections.isEmpty()) {
+            Label emptyLbl = new Label("No configured elections found for this organization.");
+            emptyLbl.setStyle(FONT + "-fx-text-fill: #64748b; -fx-font-size: 11.5px; -fx-padding: 8;");
+            breakdownList.getChildren().add(emptyLbl);
+        } else {
+            int idx = 0;
+            for (ElectionData e : latestStats.elections) {
+                int eCast = latestStats.ballotsPerElection.getOrDefault(e.getId(), 0);
+                int eEligible = eligible > 0 ? eligible : Math.max(eCast, 1);
+                double prog = Math.min(1.0, (double) eCast / eEligible);
+                String c = colors[idx % colors.length];
+                breakdownList.getChildren().add(
+                        createModernBreakdownRow(e.getTitle() != null ? e.getTitle() : "Untitled Election", eCast,
+                                eEligible, prog, c));
+                idx++;
+            }
+        }
         breakdownSection.getChildren().addAll(breakdownTitle, breakdownList);
 
         modalContent.getChildren().addAll(reportHeader, metricStrip, privacyStandardBox, breakdownSection);
@@ -752,7 +970,7 @@ public class AdminDashboard extends Application {
 
         dialog.showAndWait().ifPresent(response -> {
             if (response == exportButtonType) {
-                exportReportToFile(ownerStage, LocalDateTime.now().format(dtf));
+                exportReportToFile(ownerStage, formattedTimestamp, displayOrgName, registered, cast, turnout);
             }
         });
     }
@@ -785,7 +1003,7 @@ public class AdminDashboard extends Application {
         VBox text = new VBox(1);
         Label name = new Label(electionName);
         name.setStyle(FONT + "-fx-font-size: 11.5px; -fx-font-weight: 700; -fx-text-fill: #0f172a;");
-        Label part = new Label(voted + " cast of " + total + " voters");
+        Label part = new Label(voted + " cast of " + total + " eligible");
         part.setStyle(FONT + "-fx-font-size: 10px; -fx-text-fill: #64748b;");
         text.getChildren().addAll(name, part);
 
@@ -805,7 +1023,8 @@ public class AdminDashboard extends Application {
         return row;
     }
 
-    private void exportReportToFile(Stage ownerStage, String timestamp) {
+    private void exportReportToFile(Stage ownerStage, String timestamp, String orgName, int registered, int cast,
+            double turnout) {
         FileChooser fileChooser = new FileChooser();
         fileChooser.setTitle("Save Turnout Audit Report");
         fileChooser.setInitialFileName("ElectraVote_Turnout_Report_" + System.currentTimeMillis() + ".txt");
@@ -818,13 +1037,28 @@ public class AdminDashboard extends Application {
                 writer.write("                ELECTRAVOTE SaaS ELECTION PLATFORM                  \n");
                 writer.write("                   OFFICIAL TURNOUT AUDIT REPORT                    \n");
                 writer.write("====================================================================\n\n");
-                writer.write("Tenant Organization     : ABC College\n");
+                writer.write("Tenant Organization     : " + orgName + "\n");
                 writer.write("Audit Report Timestamp  : " + timestamp + "\n");
                 writer.write("Online System Status    : OPERATIONAL & NOMINAL\n");
                 writer.write("Ballot Privacy Standard : Zero-Knowledge Decoupled\n\n");
-                writer.write("Total Registered Voters : 4,582 Eligible Members\n");
-                writer.write("Total Ballots Recorded  : 2,947 Valid Submissions\n");
-                writer.write("Aggregate Turnout Rate  : 64.28%\n");
+                writer.write(String.format("Total Registered Voters : %,d Eligible Members\n", registered));
+                writer.write(String.format("Total Ballots Recorded  : %,d Valid Submissions\n", cast));
+                writer.write(String.format("Aggregate Turnout Rate  : %.2f%%\n", turnout));
+                writer.write("====================================================================\n");
+                writer.write("ELECTION-WISE TURNOUT BREAKDOWN:\n");
+                if (latestStats.elections.isEmpty()) {
+                    writer.write("  No configured elections found.\n");
+                } else {
+                    int eligible = latestStats.acceptedVoters > 0 ? latestStats.acceptedVoters
+                            : latestStats.totalVoters;
+                    for (ElectionData e : latestStats.elections) {
+                        int eCast = latestStats.ballotsPerElection.getOrDefault(e.getId(), 0);
+                        int eEligible = eligible > 0 ? eligible : Math.max(eCast, 1);
+                        double pct = (double) eCast * 100.0 / eEligible;
+                        writer.write(String.format("  - %s: %d cast of %d eligible (%.2f%%)\n",
+                                e.getTitle() != null ? e.getTitle() : "Untitled", eCast, eEligible, pct));
+                    }
+                }
                 writer.write("====================================================================\n");
             } catch (IOException e) {
                 e.printStackTrace();

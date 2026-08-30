@@ -135,6 +135,7 @@ public class SignInVoter implements Page {
 
                         // Set SessionManager for voter
                         com.electrovotesuperx.config.SessionManager.idToken = result.getIdToken();
+                        com.electrovotesuperx.config.SessionManager.currentRole = "voter";
                         com.electrovotesuperx.config.SessionManager.joinCode = voter.getJoinCode();
                         com.electrovotesuperx.config.SessionManager.organizationName = voter.getOrganizationName();
                         com.electrovotesuperx.config.SessionManager.voterUid = voter.getUid();
@@ -142,6 +143,9 @@ public class SignInVoter implements Page {
                         com.electrovotesuperx.config.SessionManager.voterName = voter.getFullName();
                         com.electrovotesuperx.config.SessionManager.voterStatus = voter.getStatus();
                         com.electrovotesuperx.config.SessionManager.voterPhone = voter.getPhone();
+                        com.electrovotesuperx.config.SessionManager.adminUid = null;
+                        com.electrovotesuperx.config.SessionManager.adminEmail = null;
+                        com.electrovotesuperx.config.SessionManager.adminName = null;
 
                         // Load voter data into the dashboard
                         VoterDashboard.loadVoterData(

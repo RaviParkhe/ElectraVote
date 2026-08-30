@@ -217,7 +217,7 @@ public class Sidebar extends VBox {
                                 new OfflineStatusPage().getScene()));
 
                 Button exitToHome = createButton(
-                                "🚪   Exit to Main");
+                                "🚪   Logout");
                 exitToHome.setStyle(
                                 "-fx-background-color: transparent;" +
                                                 "-fx-text-fill:#F87171;" +
@@ -228,12 +228,21 @@ public class Sidebar extends VBox {
                                                 "-fx-background-radius:8;");
 
                 exitToHome.setOnAction(e -> {
+                        System.out.println("Polling Officer/User logging out...");
                         com.electrovotesuperx.config.SessionManager.clearSession();
                         Stage currentStage = Navigation.getStage();
-                        com.electrovotesuperx.view.HomePageView.HomePage homePage = new com.electrovotesuperx.view.HomePageView.HomePage(currentStage);
-                        Navigation.goTo(homePage.getScene(() -> {
-                                if (currentStage != null) currentStage.close();
-                        }));
+                        if (currentStage != null) {
+                                com.electrovotesuperx.view.LoginPageView.Login.loginStage = currentStage;
+                                com.electrovotesuperx.utils.Navigation.init(currentStage);
+                                com.electrovotesuperx.view.LoginPageView.Login login = new com.electrovotesuperx.view.LoginPageView.Login();
+                                Scene loginScene = login.getScene(() -> {
+                                        currentStage.close();
+                                });
+                                currentStage.setTitle("ElectraVote");
+                                currentStage.setScene(loginScene);
+                                currentStage.setMaximized(true);
+                                currentStage.show();
+                        }
                 });
 
                 // =====================================================
@@ -317,21 +326,21 @@ public class Sidebar extends VBox {
                 button.setStyle(NORMAL);
 
                 // =====================================================
-                // HOVER
+                // SMOOTH HOVER ANIMATION (Slide Right + Scale)
                 // =====================================================
 
+                button.setCursor(javafx.scene.Cursor.HAND);
+
                 button.setOnMouseEntered(e -> {
-
-                        button.setScaleX(1.03);
-                        button.setScaleY(1.03);
-
+                    javafx.animation.TranslateTransition tt = new javafx.animation.TranslateTransition(javafx.util.Duration.millis(120), button);
+                    tt.setToX(4);
+                    tt.play();
                 });
 
                 button.setOnMouseExited(e -> {
-
-                        button.setScaleX(1.0);
-                        button.setScaleY(1.0);
-
+                    javafx.animation.TranslateTransition tt = new javafx.animation.TranslateTransition(javafx.util.Duration.millis(120), button);
+                    tt.setToX(0);
+                    tt.play();
                 });
 
                 return button;

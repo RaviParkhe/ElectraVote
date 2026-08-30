@@ -2,7 +2,10 @@ package com.electrovotesuperx.view.VoterView;
 
 import com.electrovotesuperx.config.SessionManager;
 import com.electrovotesuperx.dao.AdminDAO.CandidateDAO;
+import com.electrovotesuperx.dao.AdminDAO.ElectionDAO;
+import com.electrovotesuperx.dao.AdminDAO.VoteDAO;
 import com.electrovotesuperx.model.AdminModel.Candidate;
+import com.electrovotesuperx.model.AdminModel.ElectionData;
 
 import javafx.application.Platform;
 import javafx.geometry.Insets;
@@ -22,9 +25,7 @@ import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javafx.scene.text.Text;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 public class Notification {
 
@@ -34,13 +35,15 @@ public class Notification {
     private static final String BLUE = "#1464F4";
     private static final String PURPLE = "#7B4DFF";
     private static final String GREEN = "#10B981";
+    private static final String GOLD = "#D97706";
+    private static final String RED = "#EF4444";
 
     public static VBox createNotificationView(List<Map<String, String>> legacyRecords) {
         return createNotificationView();
     }
 
     /**
-     * Dynamically generates the Notification view using live session and database data.
+     * Dynamically generates the Notification view using live session, election results, and candidate data.
      */
     public static VBox createNotificationView() {
         VBox content = new VBox(20);
@@ -59,7 +62,7 @@ public class Notification {
         title.setFont(Font.font("Arial", FontWeight.BOLD, 24));
 
         Text subtitle = new Text(
-                "Stay updated with announcements, ballot schedules, and administrative candidate reviews from your organizations.");
+                "Stay updated with live election winning standings, ballot schedules, announcements, and administrative reviews.");
         subtitle.setFill(Color.web(SECONDARY));
         subtitle.setFont(Font.font(13));
         subtitle.setWrappingWidth(900);
@@ -70,19 +73,132 @@ public class Notification {
 
         VBox loadingBox = new VBox(10);
         loadingBox.setAlignment(Pos.CENTER);
-        loadingBox.setPadding(new Insets(20));
-        loadingBox.getChildren().addAll(new ProgressIndicator(), new Label("Checking for notifications..."));
+        loadingBox.setPadding(new Insets(25));
+        loadingBox.getChildren().addAll(new ProgressIndicator(), new Label("Fetching real-time notifications & election winning standings..."));
         notificationsList.getChildren().add(loadingBox);
 
         Thread t = new Thread(() -> {
             String org = SessionManager.organizationName != null && !SessionManager.organizationName.isBlank()
-                    ? SessionManager.organizationName : "Organization";
+                    ? SessionManager.organizationName : (SessionManager.joinCode != null ? SessionManager.joinCode : "Organization");
             String voterName = SessionManager.voterName != null ? SessionManager.voterName : "Voter";
             String voterEmail = SessionManager.voterEmail != null ? SessionManager.voterEmail.trim().toLowerCase() : "";
+            String joinCode = SessionManager.joinCode;
+            String idToken = SessionManager.idToken;
 
             List<VBox> cards = new ArrayList<>();
 
-            // 1. Account verified notice
+            // ─── 1. Live Election Winner & Leading Candidate Notifications ───
+            try {
+                if (joinCode != null && !joinCode.isBlank()) {
+                    List<ElectionData> elections = ElectionDAO.getElectionsByOrg(joinCode, idToken);
+                    if (elections != null) {
+                        for (ElectionData elec : elections) {
+                            Map<String, Map<String, Integer>> results = null;
+                            try {
+                                results = VoteDAO.getResults(elec.getId(), idToken);
+                            } catch (Exception ignored) {}
+
+                            int totalElectionVotes = 0;
+                            StringBuilder winnerSummary = new StringBuilder();
+                            boolean hasWinners = false;
+
+                            if (results != null && !results.isEmpty()) {
+                                for (Map.Entry<String, Map<String, Integer>> posEntry : results.entrySet()) {
+                                    String pos = posEntry.getKey();
+                                    Map<String, Integer> candVotes = posEntry.getValue();
+                                    int posTotal = 0;
+                                    String topCand = null;
+                                    int maxVotes = -1;
+
+                                    for (Map.Entry<String, Integer> cv : candVotes.entrySet()) {
+                                        posTotal += cv.getValue();
+                                        totalElectionVotes += cv.getValue();
+                                        if (cv.getValue() > maxVotes) {
+                                            maxVotes = cv.getValue();
+                                            topCand = cv.getKey();
+                                        }
+                                    }
+
+                                    if (maxVotes > 0 && topCand != null) {
+                                        hasWinners = true;
+                                        double pct = posTotal > 0 ? ((double) maxVotes / posTotal) * 100.0 : 0.0;
+                                        winnerSummary.append("• Position: ").append(pos)
+                                                .append(" ➔ Current Winner/Leader: 👑 ").append(topCand)
+                                                .append(" with ").append(maxVotes).append(" votes (")
+                                                .append(String.format("%.1f", pct)).append("% of ")
+                                                .append(posTotal).append(" ballots)\n");
+                                    }
+                                }
+                            }
+
+                            if (hasWinners) {
+                                cards.add(createNotificationCard(
+                                        org,
+                                        "🏆 Election Winner / Leading Notice: " + elec.getTitle(),
+                                        "Official live tally update from Firebase for election '" + elec.getTitle() + "':\n\n"
+                                                + winnerSummary.toString().trim()
+                                                + "\n\nTotal ballots recorded in Firebase: " + totalElectionVotes + " votes.",
+                                        "👑 Live Winner",
+                                        GOLD
+                                ));
+                            } else {
+                                cards.add(createNotificationCard(
+                                        org,
+                                        "🗳️ Active Election Ballot Open: " + elec.getTitle(),
+                                        "Voting is active for '" + elec.getTitle() + "'. No votes have been recorded yet. Log in to the Vote section to cast your confidential encrypted ballot!",
+                                        "Live Ballot",
+                                        BLUE
+                                ));
+                            }
+                        }
+                    }
+                }
+            } catch (Exception exElec) {
+                System.err.println("[Notification] Election results load note: " + exElec.getMessage());
+            }
+
+            // ─── 2. Query Candidate Nomination Status ───
+            try {
+                if (joinCode != null) {
+                    List<Candidate> candidates = CandidateDAO.getCandidatesByOrg(joinCode, idToken);
+                    if (candidates != null) {
+                        for (Candidate c : candidates) {
+                            boolean match = (c.getEmail() != null && c.getEmail().trim().equalsIgnoreCase(voterEmail)) ||
+                                    (c.getName() != null && c.getName().trim().equalsIgnoreCase(voterName));
+                            if (match) {
+                                String status = c.getStatus() != null ? c.getStatus().toUpperCase() : "PENDING";
+                                if ("ACCEPTED".equals(status) || "APPROVED".equals(status)) {
+                                    cards.add(createNotificationCard(
+                                            org,
+                                            "Candidate Nomination Approved 🎉",
+                                            "Congratulations! Your candidate nomination for '" + c.getPosition() + "' has been approved by the election administrator and added to the official ballot.",
+                                            "Approved",
+                                            PURPLE
+                                    ));
+                                } else if ("REJECTED".equals(status)) {
+                                    cards.add(createNotificationCard(
+                                            org,
+                                            "Candidate Nomination Status Update",
+                                            "Your candidate application for '" + c.getPosition() + "' was reviewed and declined by the election committee.",
+                                            "Notice",
+                                            RED
+                                    ));
+                                } else {
+                                    cards.add(createNotificationCard(
+                                            org,
+                                            "Candidate Application Under Review",
+                                            "Your candidate filing for '" + c.getPosition() + "' is currently pending review by the election administrator.",
+                                            "Pending",
+                                            BLUE
+                                    ));
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (Exception ignored) {}
+
+            // ─── 3. Account Verified Notice ───
             cards.add(createNotificationCard(
                     org,
                     "Voter Enrollment Verified",
@@ -90,45 +206,6 @@ public class Notification {
                     "Active",
                     GREEN
             ));
-
-            // 2. Query candidate filings status
-            try {
-                if (SessionManager.joinCode != null) {
-                    List<Candidate> candidates = CandidateDAO.getCandidatesByOrg(SessionManager.joinCode, SessionManager.idToken);
-                    for (Candidate c : candidates) {
-                        boolean match = (c.getEmail() != null && c.getEmail().trim().equalsIgnoreCase(voterEmail)) ||
-                                (c.getName() != null && c.getName().trim().equalsIgnoreCase(voterName));
-                        if (match) {
-                            String status = c.getStatus() != null ? c.getStatus().toUpperCase() : "PENDING";
-                            if ("ACCEPTED".equals(status)) {
-                                cards.add(createNotificationCard(
-                                        org,
-                                        "Candidate Nomination Approved 🎉",
-                                        "Congratulations! Your candidate nomination for '" + c.getPosition() + "' has been approved by the election administrator and added to the official ballot.",
-                                        "Official",
-                                        PURPLE
-                                ));
-                            } else if ("REJECTED".equals(status)) {
-                                cards.add(createNotificationCard(
-                                        org,
-                                        "Candidate Nomination Status Update",
-                                        "Your candidate application for '" + c.getPosition() + "' was reviewed and declined by the election committee.",
-                                        "Notice",
-                                        "#EF4444"
-                                ));
-                            } else {
-                                cards.add(createNotificationCard(
-                                        org,
-                                        "Candidate Application Under Review",
-                                        "Your candidate filing for '" + c.getPosition() + "' is currently pending review by the election administrator.",
-                                        "Pending",
-                                        BLUE
-                                ));
-                            }
-                        }
-                    }
-                }
-            } catch (Exception ignored) {}
 
             Platform.runLater(() -> {
                 notificationsList.getChildren().clear();
@@ -138,7 +215,12 @@ public class Notification {
                     emptyText.setFont(Font.font(13));
                     notificationsList.getChildren().add(emptyText);
                 } else {
-                    notificationsList.getChildren().addAll(cards);
+                    int delay = 0;
+                    for (VBox c : cards) {
+                        com.electrovotesuperx.utils.UIAnimationHelper.fadeInSlideUp(c, delay);
+                        delay += 90;
+                        notificationsList.getChildren().add(c);
+                    }
                 }
             });
         });
@@ -159,9 +241,12 @@ public class Notification {
         card.setStyle(
                 "-fx-background-color: white;" +
                         "-fx-background-radius: 12;" +
-                        "-fx-border-color: " + BORDER + ";" +
+                        "-fx-border-color: " + (GOLD.equals(themeColor) ? "#FCD34D" : BORDER) + ";" +
+                        "-fx-border-width: " + (GOLD.equals(themeColor) ? "1.6;" : "1;") +
                         "-fx-border-radius: 12;" +
-                        "-fx-effect: dropshadow(three-pass-box, rgba(15, 23, 42, 0.04), 8, 0, 0, 3);");
+                        "-fx-effect: dropshadow(three-pass-box, rgba(15, 23, 42, 0.05), 8, 0, 0, 3);");
+
+        com.electrovotesuperx.utils.UIAnimationHelper.addCardHover(card);
 
         HBox topRow = new HBox();
         topRow.setAlignment(Pos.CENTER_LEFT);
@@ -191,12 +276,13 @@ public class Notification {
 
         Label timeBadge = new Label(timeAgo);
         timeBadge.setStyle(
-                "-fx-background-color: #F1F5F9;" +
-                        "-fx-text-fill: #64748B;" +
-                        "-fx-font-size: 11px;" +
+                "-fx-background-color: " + (GOLD.equals(themeColor) ? "#FEF3C7" : "#F1F5F9") + ";" +
+                        "-fx-text-fill: " + (GOLD.equals(themeColor) ? "#B45309" : "#64748B") + ";" +
+                        "-fx-font-size: 11.5px;" +
                         "-fx-font-weight: bold;" +
                         "-fx-padding: 4 10;" +
-                        "-fx-background-radius: 10;");
+                        "-fx-background-radius: 10;" +
+                        (GOLD.equals(themeColor) ? "-fx-border-color: #FCD34D; -fx-border-radius: 10;" : ""));
 
         topRow.getChildren().addAll(avatarPane, titleBox, spacer, timeBadge);
 
@@ -208,4 +294,4 @@ public class Notification {
         card.getChildren().addAll(topRow, new Separator(), bodyText);
         return card;
     }
-}
+}

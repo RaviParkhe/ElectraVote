@@ -2,8 +2,8 @@ package com.electrovotesuperx.view.QuickPollView;
 
 import com.electrovotesuperx.config.SessionManager;
 import com.electrovotesuperx.config.firebaseConfig.FirebaseDatabaseService;
+import com.electrovotesuperx.dao.QuickPollDAO.QuickPollDAO;
 import com.electrovotesuperx.view.Page;
-import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
 import javafx.animation.FadeTransition;
@@ -48,6 +48,29 @@ public class QuickPoll implements Page {
     };
 
     private String searchFilter = "";
+    private String customOrgFilter = ""; // Used if user is guest/homepage without session joinCode
+    private int activeTab = 0; // 0 = Browse & Vote, 1 = Create Studio
+
+    public QuickPoll() {
+        if (SessionManager.joinCode != null && !SessionManager.joinCode.isBlank()) {
+            this.customOrgFilter = SessionManager.joinCode.trim();
+        }
+    }
+
+    public QuickPoll(String initialJoinCode) {
+        if (initialJoinCode != null && !initialJoinCode.isBlank()) {
+            this.customOrgFilter = initialJoinCode.trim();
+        } else if (SessionManager.joinCode != null && !SessionManager.joinCode.isBlank()) {
+            this.customOrgFilter = SessionManager.joinCode.trim();
+        }
+    }
+
+    public String getEffectiveJoinCode() {
+        if (SessionManager.joinCode != null && !SessionManager.joinCode.isBlank()) {
+            return SessionManager.joinCode.trim();
+        }
+        return customOrgFilter.trim();
+    }
 
     @Override
     public Scene getScene(Runnable backCallback) {
@@ -74,7 +97,7 @@ public class QuickPoll implements Page {
         root.setCenter(scroll);
         scene = new Scene(root, 1100, 750);
 
-        // Initial fetch from Firebase
+        // Initial fetch from Firestore / Firebase
         fetchPollsFromFirebase(mainContent);
 
         return scene;
@@ -85,7 +108,8 @@ public class QuickPoll implements Page {
         header.setAlignment(Pos.CENTER_LEFT);
         header.setPadding(new Insets(16, 36, 16, 36));
         header.setStyle(
-                "-fx-background-color: #ffffff; -fx-border-color: " + BORDER + "; -fx-border-width: 0 0 1.5 0; -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.03), 8, 0, 0, 2);");
+                "-fx-background-color: #ffffff; -fx-border-color: " + BORDER
+                        + "; -fx-border-width: 0 0 1.5 0; -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.03), 8, 0, 0, 2);");
 
         Circle logo = new Circle(18, Color.web(PRIMARY));
         Label logoSymbol = new Label("📊");
@@ -93,9 +117,9 @@ public class QuickPoll implements Page {
         StackPane logoPane = new StackPane(logo, logoSymbol);
 
         VBox brandBox = new VBox(2);
-        Label brand = new Label("Quick Poll Cloud Express");
+        Label brand = new Label("Quick Poll Express");
         brand.setStyle(FONT + "-fx-font-size: 19px; -fx-font-weight: 900; -fx-text-fill: " + TEXT_DARK + ";");
-        Label sub = new Label("Real-time cloud polling with strict 1-vote verification");
+        Label sub = new Label("Organization-scoped live polling with strict 1-vote verification");
         sub.setStyle(FONT + "-fx-font-size: 11.5px; -fx-text-fill: " + TEXT_SUB + ";");
         brandBox.getChildren().addAll(brand, sub);
 
@@ -105,16 +129,69 @@ public class QuickPoll implements Page {
         Region headerSpacer = new Region();
         HBox.setHgrow(headerSpacer, Priority.ALWAYS);
 
+        // Organization Badge Pill
+        HBox orgBadge = buildOrgBadge();
+
         // Active Voter Identifier Pill / Change Name Dialog
         HBox voterBadge = buildVoterBadge();
 
-        Button backButton = new Button("← Back to Home");
+        Button backButton = new Button("← Back");
         backButton.setPrefHeight(36);
-        backButton.setStyle(FONT + "-fx-background-color: #0f172a; -fx-text-fill: white; -fx-font-size: 12.5px; -fx-font-weight: 800; -fx-background-radius: 8; -fx-cursor: hand; -fx-padding: 0 16;");
+        backButton.setStyle(FONT
+                + "-fx-background-color: #0f172a; -fx-text-fill: white; -fx-font-size: 12.5px; -fx-font-weight: 800; -fx-background-radius: 8; -fx-cursor: hand; -fx-padding: 0 16;");
         backButton.setOnAction(e -> backCallback.run());
 
-        header.getChildren().addAll(titleGroup, headerSpacer, voterBadge, backButton);
+        header.getChildren().addAll(titleGroup, headerSpacer, orgBadge, voterBadge, backButton);
         return header;
+    }
+
+    private HBox buildOrgBadge() {
+        HBox orgBadge = new HBox(8);
+        orgBadge.setAlignment(Pos.CENTER_LEFT);
+        orgBadge.setPadding(new Insets(6, 14, 6, 14));
+        orgBadge.setStyle(
+                "-fx-background-color: #f0fdf4; -fx-background-radius: 20; -fx-border-color: #86efac; -fx-border-radius: 20; -fx-border-width: 1; -fx-cursor: hand;");
+
+        Label orgIcon = new Label("🏢");
+        String effCode = getEffectiveJoinCode();
+        String displayOrg;
+        if (!effCode.isEmpty()) {
+            if (SessionManager.organizationName != null
+                    && !SessionManager.organizationName.isBlank()
+                    && !SessionManager.organizationName.equalsIgnoreCase(effCode)) {
+                displayOrg = SessionManager.organizationName + " (" + effCode + ")";
+            } else {
+                displayOrg = "Org: " + effCode;
+            }
+        } else {
+            displayOrg = "Set Organization Code";
+        }
+
+        Label orgLabel = new Label(displayOrg);
+        orgLabel.setStyle(FONT + "-fx-font-size: 12px; -fx-font-weight: 800; -fx-text-fill: #166534;");
+        orgBadge.getChildren().addAll(orgIcon, orgLabel);
+
+        // Allow changing org code only if not locked by active session
+        if (SessionManager.joinCode == null || SessionManager.joinCode.isBlank()) {
+            orgBadge.setOnMouseClicked(e -> {
+                TextInputDialog dialog = new TextInputDialog(customOrgFilter);
+                dialog.setTitle("Organization Join Code");
+                dialog.setHeaderText("Set Active Organization Join Code for Quick Polls");
+                dialog.setContentText("Enter Organization Join Code (e.g. EV-1234-5678):");
+
+                dialog.showAndWait().ifPresent(code -> {
+                    customOrgFilter = code.trim();
+                    orgLabel.setText(!customOrgFilter.isEmpty() ? "Org: " + customOrgFilter : "Set Organization Code");
+                    if (scene != null && scene.getRoot() instanceof BorderPane bp) {
+                        if (bp.getCenter() instanceof ScrollPane sp && sp.getContent() instanceof VBox content) {
+                            rebuildContent(content);
+                            fetchPollsFromFirebase(content);
+                        }
+                    }
+                });
+            });
+        }
+        return orgBadge;
     }
 
     private HBox buildVoterBadge() {
@@ -122,7 +199,8 @@ public class QuickPoll implements Page {
         voterBadge.setAlignment(Pos.CENTER_LEFT);
         voterBadge.setPadding(new Insets(6, 12, 6, 12));
         voterBadge.setStyle(
-                "-fx-background-color: " + PRIMARY_LIGHT + "; -fx-background-radius: 20; -fx-border-color: #C4B5FD; -fx-border-radius: 20; -fx-border-width: 1; -fx-cursor: hand;");
+                "-fx-background-color: " + PRIMARY_LIGHT
+                        + "; -fx-background-radius: 20; -fx-border-color: #C4B5FD; -fx-border-radius: 20; -fx-border-width: 1; -fx-cursor: hand;");
 
         Label voterIcon = new Label("👤");
         String voterDisplayName = getEffectiveVoterName();
@@ -151,15 +229,20 @@ public class QuickPoll implements Page {
         });
     }
 
-    private int activeTab = 0; // 0 = Browse & Vote, 1 = Create Studio
-
-    private static boolean canCreatePoll() {
-        // If signed in as a voter, strictly NO access to create polls
+    public static boolean canCreatePoll() {
+        // Explicitly deny if user is a voter in any form
+        if ("voter".equalsIgnoreCase(SessionManager.currentRole)) {
+            return false;
+        }
         if (SessionManager.voterUid != null && !SessionManager.voterUid.isBlank()) {
             return false;
         }
-        // Admins or Home Page Admin hosts can create polls
-        return true;
+        if (SessionManager.voterName != null && !SessionManager.voterName.isBlank()
+                && (SessionManager.adminUid == null || SessionManager.adminUid.isBlank())) {
+            return false;
+        }
+        // ONLY Organization Admins with active admin session can create polls
+        return SessionManager.isAdmin() && SessionManager.adminUid != null && !SessionManager.adminUid.isBlank();
     }
 
     private void rebuildContent(VBox mainContent) {
@@ -170,29 +253,49 @@ public class QuickPoll implements Page {
             activeTab = 0; // Force voter into Browse & Vote view
         }
 
+        String effJoinCode = getEffectiveJoinCode();
+
         // 1. Hero Section
         VBox heroSection = new VBox(6);
         heroSection.setAlignment(Pos.CENTER);
-        Label title = new Label("Quick Poll Express");
-        title.setStyle(FONT + "-fx-font-size: 26px; -fx-font-weight: 900; -fx-text-fill: " + TEXT_DARK + "; -fx-letter-spacing: -0.5px;");
-        
-        String subtitleText = allowCreate
-                ? "Cloud-synced democratic polling. Search by unique #QP Number to vote remotely."
-                : "Official Electoral Polls: Search by unique #QP Number or keywords to cast your verified ballot.";
+        Label title = new Label("Quick Polls");
+        title.setStyle(FONT + "-fx-font-size: 26px; -fx-font-weight: 900; -fx-text-fill: " + TEXT_DARK
+                + "; -fx-letter-spacing: -0.5px;");
+
+        String subtitleText = !effJoinCode.isEmpty()
+                ? "Exclusive polls created for Organization Join Code: " + effJoinCode
+                : "Real-time organization-specific democratic polling. Search or enter your Join Code to vote.";
         Label subtitle = new Label(subtitleText);
         subtitle.setStyle(FONT + "-fx-font-size: 13.5px; -fx-text-fill: " + TEXT_SUB + ";");
         heroSection.getChildren().addAll(title, subtitle);
 
         mainContent.getChildren().add(heroSection);
 
-        // 2. Segmented Navigation Bar (Only displayed if user has Poll Creation permissions)
+        // 2. Organization Scoping Notification Pill
+        if (!effJoinCode.isEmpty()) {
+            HBox orgScopeBanner = new HBox(8);
+            orgScopeBanner.setAlignment(Pos.CENTER);
+            orgScopeBanner.setPadding(new Insets(8, 16, 8, 16));
+            orgScopeBanner.setMaxWidth(750);
+            orgScopeBanner.setStyle(
+                    "-fx-background-color: #ecfdf5; -fx-border-color: #a7f3d0; -fx-border-radius: 8; -fx-background-radius: 8;");
+            Label orgBadgeIcon = new Label("🔒");
+            orgBadgeIcon.setStyle(FONT + "-fx-font-size: 13px;");
+            Label orgScopeText = new Label(
+                    "Polls are private & strictly restricted to Organization Join Code: " + effJoinCode);
+            orgScopeText.setStyle(FONT + "-fx-font-size: 12.5px; -fx-font-weight: 800; -fx-text-fill: #065f46;");
+            orgScopeBanner.getChildren().addAll(orgBadgeIcon, orgScopeText);
+            mainContent.getChildren().add(orgScopeBanner);
+        }
+
+        // 3. Segmented Navigation Bar (Displayed if user has Poll Creation permissions)
         if (allowCreate) {
             HBox tabSwitcher = buildTabSwitcher(mainContent);
             mainContent.getChildren().add(tabSwitcher);
         }
 
         if (activeTab == 0) {
-            // TAB 0: VOTE & BROWSE (Available to all voters)
+            // TAB 0: VOTE & BROWSE (Available to all members)
             HBox filterBar = buildFilterBar(mainContent);
 
             pollsListContainer = new VBox(18);
@@ -206,7 +309,7 @@ public class QuickPoll implements Page {
             mainContent.getChildren().addAll(filterBar, loadingIndicator, pollsListContainer);
             renderPollCards(mainContent);
         } else {
-            // TAB 1: CREATE STUDIO (Admin Only)
+            // TAB 1: CREATE STUDIO (Admin / Host Only)
             VBox createCard = buildCreatePollCard(mainContent);
             mainContent.getChildren().add(createCard);
         }
@@ -223,16 +326,20 @@ public class QuickPoll implements Page {
         browseTab.setPrefWidth(190);
         browseTab.setPrefHeight(36);
 
-        Button createTab = new Button("⚡ Create New Poll");
+        Button createTab = new Button("⚡ Create Org Poll");
         createTab.setPrefWidth(190);
         createTab.setPrefHeight(36);
 
         if (activeTab == 0) {
-            browseTab.setStyle(FONT + "-fx-background-color: white; -fx-text-fill: " + PRIMARY + "; -fx-font-weight: 900; -fx-font-size: 13px; -fx-background-radius: 8; -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.06), 4, 0, 0, 1);");
-            createTab.setStyle(FONT + "-fx-background-color: transparent; -fx-text-fill: " + TEXT_SUB + "; -fx-font-weight: 700; -fx-font-size: 13px; -fx-cursor: hand;");
+            browseTab.setStyle(FONT + "-fx-background-color: white; -fx-text-fill: " + PRIMARY
+                    + "; -fx-font-weight: 900; -fx-font-size: 13px; -fx-background-radius: 8; -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.06), 4, 0, 0, 1);");
+            createTab.setStyle(FONT + "-fx-background-color: transparent; -fx-text-fill: " + TEXT_SUB
+                    + "; -fx-font-weight: 700; -fx-font-size: 13px; -fx-cursor: hand;");
         } else {
-            browseTab.setStyle(FONT + "-fx-background-color: transparent; -fx-text-fill: " + TEXT_SUB + "; -fx-font-weight: 700; -fx-font-size: 13px; -fx-cursor: hand;");
-            createTab.setStyle(FONT + "-fx-background-color: white; -fx-text-fill: " + PRIMARY + "; -fx-font-weight: 900; -fx-font-size: 13px; -fx-background-radius: 8; -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.06), 4, 0, 0, 1);");
+            browseTab.setStyle(FONT + "-fx-background-color: transparent; -fx-text-fill: " + TEXT_SUB
+                    + "; -fx-font-weight: 700; -fx-font-size: 13px; -fx-cursor: hand;");
+            createTab.setStyle(FONT + "-fx-background-color: white; -fx-text-fill: " + PRIMARY
+                    + "; -fx-font-weight: 900; -fx-font-size: 13px; -fx-background-radius: 8; -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.06), 4, 0, 0, 1);");
         }
 
         browseTab.setOnAction(e -> {
@@ -254,27 +361,54 @@ public class QuickPoll implements Page {
         createCard.setPadding(new Insets(24));
         createCard.setMaxWidth(750);
         createCard.setStyle(
-                "-fx-background-color: " + CARD_BG + "; -fx-background-radius: 14; -fx-border-color: #818cf8; -fx-border-radius: 14; -fx-border-width: 1.5; -fx-effect: dropshadow(gaussian, rgba(99,102,241,0.08), 10, 0, 0, 3);");
+                "-fx-background-color: " + CARD_BG
+                        + "; -fx-background-radius: 14; -fx-border-color: #818cf8; -fx-border-radius: 14; -fx-border-width: 1.5; -fx-effect: dropshadow(gaussian, rgba(99,102,241,0.08), 10, 0, 0, 3);");
 
         HBox cardTop = new HBox(8);
         cardTop.setAlignment(Pos.CENTER_LEFT);
         Label createIcon = new Label("⚡");
         createIcon.setStyle(FONT + "-fx-font-size: 16px;");
-        Label createTitle = new Label("Create a New Cloud Poll");
+        Label createTitle = new Label("Create Poll for Organization");
         createTitle.setStyle(FONT + "-fx-font-weight: 900; -fx-font-size: 16px; -fx-text-fill: " + TEXT_DARK + ";");
         cardTop.getChildren().addAll(createIcon, createTitle);
 
-        // Question Field
+        // 1. Organization Join Code Field
+        VBox orgBox = new VBox(6);
+        Label orgLabel = new Label("Organization Join Code (Poll Scoping):");
+        orgLabel.setStyle(FONT + "-fx-font-size: 12.5px; -fx-text-fill: " + TEXT_DARK + "; -fx-font-weight: 800;");
+
+        TextField orgJoinCodeField = new TextField();
+        String currentSessionOrg = getEffectiveJoinCode();
+        if (!currentSessionOrg.isEmpty()) {
+            orgJoinCodeField.setText(currentSessionOrg);
+            // If locked from active admin session, disable editing
+            if (SessionManager.joinCode != null && !SessionManager.joinCode.isBlank()) {
+                orgJoinCodeField.setDisable(true);
+                orgJoinCodeField.setStyle(FONT + "-fx-background-color: #f1f5f9; -fx-border-color: " + BORDER
+                        + "; -fx-border-radius: 8; -fx-padding: 8 12; -fx-font-size: 13px; -fx-font-weight: bold;");
+            } else {
+                orgJoinCodeField.setStyle(FONT + "-fx-background-radius: 8; -fx-border-color: " + BORDER
+                        + "; -fx-border-radius: 8; -fx-padding: 8 12; -fx-font-size: 13px;");
+            }
+        } else {
+            orgJoinCodeField.setPromptText("Enter Organization Join Code (e.g. EV-8472-9123)");
+            orgJoinCodeField.setStyle(FONT + "-fx-background-radius: 8; -fx-border-color: " + BORDER
+                    + "; -fx-border-radius: 8; -fx-padding: 8 12; -fx-font-size: 13px;");
+        }
+        orgBox.getChildren().addAll(orgLabel, orgJoinCodeField);
+
+        // 2. Question Field
         VBox qBox = new VBox(6);
         Label questionLabel = new Label("Poll Question:");
         questionLabel.setStyle(FONT + "-fx-font-size: 12.5px; -fx-text-fill: " + TEXT_DARK + "; -fx-font-weight: 800;");
         TextField questionField = new TextField();
-        questionField.setPromptText("e.g. What date should we schedule the annual campus hackathon?");
+        questionField.setPromptText("e.g. Which date should we schedule the annual organization hackathon?");
         questionField.setPrefHeight(40);
-        questionField.setStyle(FONT + "-fx-background-radius: 8; -fx-border-color: " + BORDER + "; -fx-border-radius: 8; -fx-padding: 8 12; -fx-font-size: 13px;");
+        questionField.setStyle(FONT + "-fx-background-radius: 8; -fx-border-color: " + BORDER
+                + "; -fx-border-radius: 8; -fx-padding: 8 12; -fx-font-size: 13px;");
         qBox.getChildren().addAll(questionLabel, questionField);
 
-        // Options
+        // 3. Options
         VBox optBox = new VBox(8);
         Label optionsLabel = new Label("Voting Choices (Minimum 2):");
         optionsLabel.setStyle(FONT + "-fx-font-size: 12.5px; -fx-text-fill: " + TEXT_DARK + "; -fx-font-weight: 800;");
@@ -282,11 +416,11 @@ public class QuickPoll implements Page {
         VBox optionFields = new VBox(8);
         optionFields.getChildren().addAll(
                 createOptionField("Option 1: e.g. Friday, October 24"),
-                createOptionField("Option 2: e.g. Saturday, October 25")
-        );
+                createOptionField("Option 2: e.g. Saturday, October 25"));
 
         Button addOptionBtn = new Button("+ Add Another Choice");
-        addOptionBtn.setStyle(FONT + "-fx-background-color: " + PRIMARY_LIGHT + "; -fx-text-fill: " + PRIMARY + "; -fx-font-size: 12px; -fx-font-weight: 800; -fx-background-radius: 6; -fx-padding: 6 12; -fx-cursor: hand;");
+        addOptionBtn.setStyle(FONT + "-fx-background-color: " + PRIMARY_LIGHT + "; -fx-text-fill: " + PRIMARY
+                + "; -fx-font-size: 12px; -fx-font-weight: 800; -fx-background-radius: 6; -fx-padding: 6 12; -fx-cursor: hand;");
         addOptionBtn.setOnAction(e -> {
             int count = optionFields.getChildren().size() + 1;
             optionFields.getChildren().add(createOptionField("Option " + count));
@@ -301,11 +435,19 @@ public class QuickPoll implements Page {
         HBox btnRow = new HBox(12);
         btnRow.setAlignment(Pos.CENTER_RIGHT);
 
-        Button createBtn = new Button("🚀 Publish Cloud Poll");
+        Button createBtn = new Button("🚀 Publish Organization Poll");
         createBtn.setPrefHeight(38);
-        createBtn.setStyle(FONT + "-fx-background-color: " + PRIMARY + "; -fx-text-fill: white; -fx-font-size: 13.5px; -fx-font-weight: 900; -fx-padding: 8 22; -fx-background-radius: 8; -fx-cursor: hand;");
+        createBtn.setStyle(FONT + "-fx-background-color: " + PRIMARY
+                + "; -fx-text-fill: white; -fx-font-size: 13.5px; -fx-font-weight: 900; -fx-padding: 8 22; -fx-background-radius: 8; -fx-cursor: hand;");
 
         createBtn.setOnAction(e -> {
+            String orgJoinCode = orgJoinCodeField.getText().trim();
+            if (orgJoinCode.isEmpty()) {
+                statusMsg.setStyle(FONT + "-fx-text-fill: " + ERROR + "; -fx-font-weight: bold;");
+                statusMsg.setText("❌ Please enter the Organization Join Code for this poll.");
+                return;
+            }
+
             String question = questionField.getText().trim();
             if (question.isEmpty()) {
                 statusMsg.setStyle(FONT + "-fx-text-fill: " + ERROR + "; -fx-font-weight: bold;");
@@ -330,14 +472,20 @@ public class QuickPoll implements Page {
             }
 
             // Generate unique 6-digit code e.g. QP-48291
-            String pollCode = "QP-" + (10000 + (int)(Math.random() * 90000));
+            String pollCode = "QP-" + (10000 + (int) (Math.random() * 90000));
             String creator = getEffectiveVoterName();
 
-            // Prepare JSON payload for Firebase
+            // Set effective customOrgFilter if guest
+            if (SessionManager.joinCode == null || SessionManager.joinCode.isBlank()) {
+                customOrgFilter = orgJoinCode;
+            }
+
+            // Prepare JSON payload for Realtime Database
             JsonObject pollObj = new JsonObject();
             pollObj.addProperty("pollCode", pollCode);
             pollObj.addProperty("question", question);
             pollObj.addProperty("creatorName", creator);
+            pollObj.addProperty("joinCode", orgJoinCode);
             pollObj.addProperty("createdAt", System.currentTimeMillis());
 
             JsonObject optionsObj = new JsonObject();
@@ -348,29 +496,29 @@ public class QuickPoll implements Page {
             pollObj.add("voters", new JsonObject());
 
             // Create local model immediately for zero-latency UI update
-            // Create local model immediately for zero-latency UI update
             Map<String, Integer> initialOptions = new LinkedHashMap<>();
             for (String opt : options) {
                 initialOptions.put(opt, 0);
             }
-            Poll localPoll = new Poll(pollCode, question, creator, initialOptions, new HashMap<>());
+            Poll localPoll = new Poll(pollCode, question, creator, orgJoinCode, initialOptions, new HashMap<>());
             allPollsMap.put(pollCode.toUpperCase(), localPoll);
 
-            // Switch to Browse & Vote tab and filter by new poll
+            // Switch to Browse & Vote tab
             activeTab = 0;
             searchFilter = pollCode;
             rebuildContent(mainContent);
 
-            // Save to Firestore in background
+            // Save to Firestore and Realtime Database in background
             Thread t = new Thread(() -> {
-                com.electrovotesuperx.dao.QuickPollDAO.QuickPollDAO.savePoll(pollCode, question, creator, options);
+                QuickPollDAO.savePoll(pollCode, question, creator, options, orgJoinCode);
+                FirebaseDatabaseService.saveQuickPoll(pollCode, pollObj, SessionManager.idToken);
             });
             t.setDaemon(true);
             t.start();
         });
 
         btnRow.getChildren().addAll(statusMsg, createBtn);
-        createCard.getChildren().addAll(cardTop, new Separator(), qBox, optBox, btnRow);
+        createCard.getChildren().addAll(cardTop, new Separator(), orgBox, qBox, optBox, btnRow);
         return createCard;
     }
 
@@ -379,13 +527,14 @@ public class QuickPoll implements Page {
         bar.setAlignment(Pos.CENTER_LEFT);
         bar.setMaxWidth(750);
         bar.setPadding(new Insets(10, 16, 10, 16));
-        bar.setStyle("-fx-background-color: white; -fx-background-radius: 10; -fx-border-color: " + BORDER + "; -fx-border-radius: 10;");
+        bar.setStyle("-fx-background-color: white; -fx-background-radius: 10; -fx-border-color: " + BORDER
+                + "; -fx-border-radius: 10;");
 
         Label searchIcon = new Label("🔍");
         searchIcon.setStyle(FONT + "-fx-font-size: 14px;");
 
         TextField searchField = new TextField(searchFilter);
-        searchField.setPromptText("Search by Question keywords or exact Unique Code (e.g. QP-48291)...");
+        searchField.setPromptText("Search by Question or Code (e.g. QP-48291)...");
         searchField.setStyle(FONT + "-fx-background-color: transparent; -fx-font-size: 12.5px; -fx-padding: 4 8;");
         HBox.setHgrow(searchField, Priority.ALWAYS);
 
@@ -394,8 +543,9 @@ public class QuickPoll implements Page {
             renderPollCards(mainContent);
         });
 
-        Button refreshBtn = new Button("↻ Sync Cloud");
-        refreshBtn.setStyle(FONT + "-fx-background-color: " + PRIMARY_LIGHT + "; -fx-text-fill: " + PRIMARY + "; -fx-font-weight: 800; -fx-font-size: 12px; -fx-background-radius: 6; -fx-cursor: hand;");
+        Button refreshBtn = new Button("↻ Sync Org Polls");
+        refreshBtn.setStyle(FONT + "-fx-background-color: " + PRIMARY_LIGHT + "; -fx-text-fill: " + PRIMARY
+                + "; -fx-font-weight: 800; -fx-font-size: 12px; -fx-background-radius: 6; -fx-cursor: hand;");
         refreshBtn.setOnAction(e -> fetchPollsFromFirebase(mainContent));
 
         bar.getChildren().addAll(searchIcon, searchField, refreshBtn);
@@ -403,10 +553,19 @@ public class QuickPoll implements Page {
     }
 
     private void fetchPollsFromFirebase(VBox mainContent) {
-        if (loadingIndicator != null) loadingIndicator.setVisible(true);
+        if (loadingIndicator != null)
+            loadingIndicator.setVisible(true);
+
+        String effJoinCode = getEffectiveJoinCode();
 
         Thread t = new Thread(() -> {
-            List<Map<String, Object>> cloudList = com.electrovotesuperx.dao.QuickPollDAO.QuickPollDAO.getAllPolls();
+            List<Map<String, Object>> cloudList;
+            if (!effJoinCode.isEmpty()) {
+                cloudList = QuickPollDAO.getPollsByOrganization(effJoinCode);
+            } else {
+                cloudList = QuickPollDAO.getAllPolls();
+            }
+
             List<Poll> freshList = new ArrayList<>();
 
             for (Map<String, Object> data : cloudList) {
@@ -414,6 +573,7 @@ public class QuickPoll implements Page {
                     String code = (String) data.getOrDefault("pollCode", "QP-UNKNOWN");
                     String question = (String) data.getOrDefault("question", "Untitled Poll");
                     String creator = (String) data.getOrDefault("creatorName", "Electoral Member");
+                    String joinCode = (String) data.getOrDefault("joinCode", "");
 
                     Map<String, Integer> options = new LinkedHashMap<>();
                     Object rawOpts = data.get("options");
@@ -440,14 +600,15 @@ public class QuickPoll implements Page {
                         }
                     }
 
-                    freshList.add(new Poll(code, question, creator, options, voters));
+                    freshList.add(new Poll(code, question, creator, joinCode, options, voters));
                 } catch (Exception ex) {
                     ex.printStackTrace();
                 }
             }
 
             Platform.runLater(() -> {
-                if (loadingIndicator != null) loadingIndicator.setVisible(false);
+                if (loadingIndicator != null)
+                    loadingIndicator.setVisible(false);
                 // Merge cloud polls into master allPollsMap
                 for (Poll cloud : freshList) {
                     allPollsMap.put(cloud.pollCode.toUpperCase(), cloud);
@@ -460,7 +621,8 @@ public class QuickPoll implements Page {
     }
 
     private void renderPollCards(VBox mainContent) {
-        if (pollsListContainer == null) return;
+        if (pollsListContainer == null)
+            return;
         pollsListContainer.getChildren().clear();
 
         List<Poll> filtered = getFilteredPolls();
@@ -468,10 +630,20 @@ public class QuickPoll implements Page {
             VBox emptyBox = new VBox(10);
             emptyBox.setAlignment(Pos.CENTER);
             emptyBox.setPadding(new Insets(36));
-            emptyBox.setStyle("-fx-background-color: white; -fx-background-radius: 14; -fx-border-color: " + BORDER + "; -fx-border-radius: 14; -fx-border-width: 1.5;");
+            emptyBox.setStyle("-fx-background-color: white; -fx-background-radius: 14; -fx-border-color: " + BORDER
+                    + "; -fx-border-radius: 14; -fx-border-width: 1.5;");
             Label icon = new Label("🗳");
             icon.setStyle(FONT + "-fx-font-size: 32px;");
-            Label msg = new Label(allPollsMap.isEmpty() ? "No active Quick Polls yet. Publish your first poll above!" : "No matching Quick Polls found for your search.");
+
+            String effJoinCode = getEffectiveJoinCode();
+            String emptyMsg;
+            if (!effJoinCode.isEmpty()) {
+                emptyMsg = "No active Quick Polls found for Organization [" + effJoinCode + "].";
+            } else {
+                emptyMsg = "No active Quick Polls yet. Publish your first organization poll above!";
+            }
+
+            Label msg = new Label(emptyMsg);
             msg.setStyle(FONT + "-fx-font-size: 13.5px; -fx-font-weight: 700; -fx-text-fill: " + TEXT_SUB + ";");
             emptyBox.getChildren().addAll(icon, msg);
             pollsListContainer.getChildren().add(emptyBox);
@@ -487,8 +659,18 @@ public class QuickPoll implements Page {
         List<Poll> result = new ArrayList<>();
         String q = searchFilter.trim().toLowerCase();
         String qClean = q.replaceAll("[^a-zA-Z0-9]", "");
+        String effJoinCode = getEffectiveJoinCode().toLowerCase();
 
         for (Poll p : allPollsMap.values()) {
+            // Strict Organization Scoping: If an active joinCode is set, only match polls
+            // with that joinCode
+            if (!effJoinCode.isEmpty()) {
+                String pJoin = p.joinCode != null ? p.joinCode.trim().toLowerCase() : "";
+                if (!pJoin.equalsIgnoreCase(effJoinCode)) {
+                    continue;
+                }
+            }
+
             if (q.isBlank()) {
                 result.add(0, p); // Newest first
                 continue;
@@ -497,8 +679,10 @@ public class QuickPoll implements Page {
             String pCode = p.pollCode.toLowerCase();
             String pCodeClean = pCode.replaceAll("[^a-zA-Z0-9]", "");
             String pQuestion = p.question.toLowerCase();
+            String pJoin = p.joinCode != null ? p.joinCode.toLowerCase() : "";
 
-            if (pCode.contains(q) || pQuestion.contains(q) || (!qClean.isEmpty() && pCodeClean.contains(qClean))) {
+            if (pCode.contains(q) || pQuestion.contains(q) || pJoin.contains(q)
+                    || (!qClean.isEmpty() && pCodeClean.contains(qClean))) {
                 result.add(0, p);
             }
         }
@@ -511,12 +695,18 @@ public class QuickPoll implements Page {
         card.setStyle("-fx-background-color: " + CARD_BG + "; -fx-background-radius: 14; -fx-border-color: " + BORDER
                 + "; -fx-border-radius: 14; -fx-border-width: 1.5; -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.04), 8, 0, 0, 2);");
 
-        // Top Row: Unique Poll Code (#QP-XXXXX) & Creator Name
+        // Top Row: Unique Poll Code (#QP-XXXXX) & Organization Join Code & Creator
         HBox topRow = new HBox(8);
         topRow.setAlignment(Pos.CENTER_LEFT);
 
         Label codeBadge = new Label("#" + poll.pollCode);
-        codeBadge.setStyle(FONT + "-fx-background-color: " + PRIMARY_LIGHT + "; -fx-text-fill: " + PRIMARY + "; -fx-font-weight: 900; -fx-font-size: 11.5px; -fx-padding: 3 8; -fx-background-radius: 6;");
+        codeBadge.setStyle(FONT + "-fx-background-color: " + PRIMARY_LIGHT + "; -fx-text-fill: " + PRIMARY
+                + "; -fx-font-weight: 900; -fx-font-size: 11.5px; -fx-padding: 3 8; -fx-background-radius: 6;");
+
+        Label orgBadge = new Label(
+                "🏢 " + (poll.joinCode != null && !poll.joinCode.isBlank() ? poll.joinCode : "Public"));
+        orgBadge.setStyle(FONT
+                + "-fx-background-color: #ecfdf5; -fx-text-fill: #059669; -fx-font-weight: 800; -fx-font-size: 11.5px; -fx-padding: 3 8; -fx-background-radius: 6;");
 
         Label creatorLbl = new Label("Hosted by " + poll.creatorName);
         creatorLbl.setStyle(FONT + "-fx-font-size: 11.5px; -fx-text-fill: " + TEXT_SUB + ";");
@@ -528,7 +718,7 @@ public class QuickPoll implements Page {
         Label totalBadge = new Label(totalVotes + (totalVotes == 1 ? " vote recorded" : " votes recorded"));
         totalBadge.setStyle(FONT + "-fx-font-size: 12px; -fx-font-weight: 800; -fx-text-fill: " + TEXT_DARK + ";");
 
-        topRow.getChildren().addAll(codeBadge, creatorLbl, sp, totalBadge);
+        topRow.getChildren().addAll(codeBadge, orgBadge, creatorLbl, sp, totalBadge);
 
         // Question Title
         Label questionLabel = new Label(poll.question);
@@ -546,12 +736,14 @@ public class QuickPoll implements Page {
             HBox votedBanner = new HBox(8);
             votedBanner.setAlignment(Pos.CENTER_LEFT);
             votedBanner.setPadding(new Insets(8, 12, 8, 12));
-            votedBanner.setStyle("-fx-background-color: #ecfdf5; -fx-background-radius: 8; -fx-border-color: #a7f3d0; -fx-border-radius: 8; -fx-border-width: 1;");
+            votedBanner.setStyle(
+                    "-fx-background-color: #ecfdf5; -fx-background-radius: 8; -fx-border-color: #a7f3d0; -fx-border-radius: 8; -fx-border-width: 1;");
 
             Label checkIcon = new Label("✔");
             checkIcon.setStyle(FONT + "-fx-font-size: 14px; -fx-text-fill: #059669; -fx-font-weight: bold;");
 
-            Label votedText = new Label("Ballot Recorded: You voted for \"" + userChosenOption + "\" (1-Vote Enforced in Cloud)");
+            Label votedText = new Label(
+                    "Ballot Recorded: You voted for \"" + userChosenOption + "\" (1-Vote Enforced in Organization)");
             votedText.setStyle(FONT + "-fx-font-size: 12px; -fx-font-weight: 800; -fx-text-fill: #065f46;");
 
             votedBanner.getChildren().addAll(checkIcon, votedText);
@@ -584,13 +776,16 @@ public class QuickPoll implements Page {
             voteBtn.setPrefHeight(30);
 
             if (isUserChoice) {
-                voteBtn.setStyle(FONT + "-fx-background-color: #059669; -fx-text-fill: white; -fx-font-size: 11.5px; -fx-font-weight: 900; -fx-background-radius: 6;");
+                voteBtn.setStyle(FONT
+                        + "-fx-background-color: #059669; -fx-text-fill: white; -fx-font-size: 11.5px; -fx-font-weight: 900; -fx-background-radius: 6;");
                 voteBtn.setDisable(true);
             } else if (hasVoted) {
-                voteBtn.setStyle(FONT + "-fx-background-color: #cbd5e1; -fx-text-fill: #64748b; -fx-font-size: 11.5px; -fx-font-weight: bold; -fx-background-radius: 6; -fx-opacity: 0.7;");
+                voteBtn.setStyle(FONT
+                        + "-fx-background-color: #cbd5e1; -fx-text-fill: #64748b; -fx-font-size: 11.5px; -fx-font-weight: bold; -fx-background-radius: 6; -fx-opacity: 0.7;");
                 voteBtn.setDisable(true);
             } else {
-                voteBtn.setStyle(FONT + "-fx-background-color: " + barColor + "; -fx-text-fill: white; -fx-font-size: 12px; -fx-font-weight: 900; -fx-background-radius: 6; -fx-cursor: hand;");
+                voteBtn.setStyle(FONT + "-fx-background-color: " + barColor
+                        + "; -fx-text-fill: white; -fx-font-size: 12px; -fx-font-weight: 900; -fx-background-radius: 6; -fx-cursor: hand;");
                 voteBtn.setOnAction(e -> {
                     String curVoterId = getEffectiveVoterId();
                     String curVoterName = getEffectiveVoterName();
@@ -599,9 +794,11 @@ public class QuickPoll implements Page {
                     poll.voteLocally(curVoterId, optionName);
                     renderPollCards(mainContent);
 
-                    // Sync vote to Firestore in background
+                    // Sync vote to Firestore and RTDB in background
                     Thread t = new Thread(() -> {
-                        com.electrovotesuperx.dao.QuickPollDAO.QuickPollDAO.recordVote(poll.pollCode, curVoterId, curVoterName, optionName);
+                        QuickPollDAO.recordVote(poll.pollCode, curVoterId, curVoterName, optionName);
+                        FirebaseDatabaseService.recordQuickPollVote(poll.pollCode, curVoterId, curVoterName, optionName,
+                                SessionManager.idToken);
                     });
                     t.setDaemon(true);
                     t.start();
@@ -649,7 +846,8 @@ public class QuickPoll implements Page {
             });
 
             Label pctLabel = new Label(String.format("%.0f%%", percentage));
-            pctLabel.setStyle(FONT + "-fx-font-size: 11.5px; -fx-font-weight: 900; -fx-text-fill: " + (percentage > 20 ? "white" : TEXT_DARK) + ";");
+            pctLabel.setStyle(FONT + "-fx-font-size: 11.5px; -fx-font-weight: 900; -fx-text-fill: "
+                    + (percentage > 20 ? "white" : TEXT_DARK) + ";");
             pctLabel.setPadding(new Insets(0, 8, 0, 8));
 
             barContainer.getChildren().addAll(barBg, barFill, pctLabel);
@@ -676,7 +874,8 @@ public class QuickPoll implements Page {
         TextField field = new TextField();
         field.setPromptText(prompt);
         field.setPrefHeight(38);
-        field.setStyle(FONT + "-fx-background-radius: 8; -fx-border-color: " + BORDER + "; -fx-border-radius: 8; -fx-padding: 6 12; -fx-font-size: 12.5px;");
+        field.setStyle(FONT + "-fx-background-radius: 8; -fx-border-color: " + BORDER
+                + "; -fx-border-radius: 8; -fx-padding: 6 12; -fx-font-size: 12.5px;");
         return field;
     }
 
@@ -704,44 +903,47 @@ public class QuickPoll implements Page {
     }
 
     // =========================================
-    // POLL DATA MODEL WITH CLOUD VOTER MAPPING
+    // POLL DATA MODEL WITH ORG JOIN CODE SCOPING
     // =========================================
 
-    private static class Poll {
-        final String pollCode;
-        final String question;
-        final String creatorName;
-        final Map<String, Integer> options;
-        final Map<String, String> voterBallots;
+    public static class Poll {
+        public final String pollCode;
+        public final String question;
+        public final String creatorName;
+        public final String joinCode;
+        public final Map<String, Integer> options;
+        public final Map<String, String> voterBallots;
 
-        Poll(String pollCode, String question, String creatorName, Map<String, Integer> options, Map<String, String> voterBallots) {
+        public Poll(String pollCode, String question, String creatorName, String joinCode, Map<String, Integer> options,
+                Map<String, String> voterBallots) {
             this.pollCode = pollCode;
             this.question = question;
             this.creatorName = creatorName;
+            this.joinCode = joinCode;
             this.options = options;
             this.voterBallots = voterBallots;
         }
 
-        synchronized boolean hasUserVoted(String voterId) {
+        public synchronized boolean hasUserVoted(String voterId) {
             return voterBallots.containsKey(voterId);
         }
 
-        synchronized String getUserVotedOption(String voterId) {
+        public synchronized String getUserVotedOption(String voterId) {
             return voterBallots.get(voterId);
         }
 
-        synchronized void voteLocally(String voterId, String option) {
+        public synchronized void voteLocally(String voterId, String option) {
             if (!hasUserVoted(voterId)) {
                 voterBallots.put(voterId, option);
                 options.put(option, options.getOrDefault(option, 0) + 1);
             }
         }
 
-        synchronized int getTotalVotes() {
+        public synchronized int getTotalVotes() {
             return options.values().stream().mapToInt(Integer::intValue).sum();
         }
 
-        synchronized int getMaxVotes() {
+        public synchronized int getMaxVotes() {
             return options.values().stream().mapToInt(Integer::intValue).max().orElse(0);
         }
     }

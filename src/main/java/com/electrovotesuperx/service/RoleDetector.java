@@ -21,6 +21,7 @@ public class RoleDetector {
 
     public enum RoleResult {
         ADMIN,
+        POLLING_OFFICER,
         VOTER,
         UNKNOWN
     }
@@ -38,7 +39,7 @@ public class RoleDetector {
      * @param uid     Firebase Auth localId
      * @param email   Authenticated email
      * @param idToken Firebase Auth idToken
-     * @return RoleResult.ADMIN, RoleResult.VOTER, or RoleResult.UNKNOWN
+     * @return RoleResult.ADMIN, RoleResult.POLLING_OFFICER, RoleResult.VOTER, or RoleResult.UNKNOWN
      */
     public static RoleResult detectRole(
             String uid,
@@ -67,6 +68,10 @@ public class RoleDetector {
 
             if ("ADMIN".equalsIgnoreCase(role)) {
                 return populateAdmin(uid, email, joinCode, idToken);
+            }
+
+            if ("POLLING_OFFICER".equalsIgnoreCase(role) || "OFFICER".equalsIgnoreCase(role)) {
+                return populatePollingOfficer(uid, email, joinCode, idToken);
             }
 
             if ("VOTER".equalsIgnoreCase(role)) {
@@ -223,6 +228,48 @@ public class RoleDetector {
 
             System.err.println(
                     "[RoleDetector] Voter lookup failed: "
+                            + e.getMessage());
+            return RoleResult.UNKNOWN;
+        }
+    }
+
+    // =========================================================
+    // POPULATE POLLING OFFICER SESSION
+    // =========================================================
+
+    private static RoleResult populatePollingOfficer(
+            String uid,
+            String email,
+            String joinCode,
+            String idToken) {
+
+        try {
+            JsonObject orgFields =
+                    FirestoreDAO.getOrganization(joinCode, idToken);
+
+            String organizationName = orgFields != null
+                    ? FirestoreDAO.getString(orgFields, "organizationName")
+                    : joinCode;
+
+            JsonObject userFields = FirestoreDAO.getUser(uid, idToken);
+            String name = userFields != null ? FirestoreDAO.getString(userFields, "name") : null;
+            if (name == null || name.isBlank()) {
+                name = userFields != null ? FirestoreDAO.getString(userFields, "fullName") : "Polling Officer";
+            }
+
+            SessionManager.idToken = idToken;
+            SessionManager.currentRole = "polling_officer";
+            SessionManager.joinCode = joinCode;
+            SessionManager.organizationName = organizationName;
+            SessionManager.officerUid = uid;
+            SessionManager.officerEmail = email;
+            SessionManager.officerName = name;
+
+            return RoleResult.POLLING_OFFICER;
+
+        } catch (Exception e) {
+            System.err.println(
+                    "[RoleDetector] Polling Officer lookup failed: "
                             + e.getMessage());
             return RoleResult.UNKNOWN;
         }
