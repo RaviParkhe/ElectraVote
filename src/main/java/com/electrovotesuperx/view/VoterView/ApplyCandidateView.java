@@ -1,0 +1,389 @@
+package com.electrovotesuperx.view.VoterView;
+
+import com.electrovotesuperx.config.SessionManager;
+import com.electrovotesuperx.dao.AdminDAO.CandidateDAO;
+import com.electrovotesuperx.dao.AdminDAO.ElectionDAO;
+import com.electrovotesuperx.model.AdminModel.Candidate;
+import com.electrovotesuperx.model.AdminModel.ElectionData;
+
+import javafx.application.Platform;
+import javafx.geometry.Insets;
+import javafx.geometry.Pos;
+import javafx.scene.control.*;
+import javafx.scene.layout.*;
+import javafx.scene.paint.Color;
+import javafx.scene.text.Font;
+import javafx.scene.text.FontWeight;
+import javafx.scene.text.Text;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
+
+public class ApplyCandidateView {
+
+    private static final String TEXT = "#172033";
+    private static final String SECONDARY = "#6B7280";
+    private static final String BORDER = "#E2E8F0";
+    private static final String BLUE = "#1464F4";
+    private static final String GREEN = "#10B981";
+    private static final String RED = "#EF4444";
+
+    public static VBox createApplyCandidateView(String preselectedElectionTitle) {
+        VBox formContainer = new VBox(20);
+        formContainer.setPadding(new Insets(25));
+        formContainer.setStyle("-fx-background-color: linear-gradient(to bottom, #F8FAFC, #EEF2F6);");
+
+        ScrollPane scrollPane = new ScrollPane(formContainer);
+        scrollPane.setFitToWidth(true);
+        scrollPane.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
+        scrollPane.setStyle("-fx-background-color: transparent; -fx-background: transparent;");
+
+        // Header
+        VBox heading = new VBox(6);
+        Text title = new Text("Apply for Candidacy ✍️");
+        title.setFill(Color.web(TEXT));
+        title.setFont(Font.font("Arial", FontWeight.BOLD, 24));
+
+        Text subtitle = new Text(
+                "Submit your official candidate nomination and manifesto to the organization electoral committee for review and certification.");
+        subtitle.setFill(Color.web(SECONDARY));
+        subtitle.setFont(Font.font(13));
+        subtitle.setWrappingWidth(900);
+        heading.getChildren().addAll(title, subtitle);
+
+        // Form Card
+        VBox formCard = new VBox(18);
+        formCard.setPadding(new Insets(28));
+        formCard.setStyle(
+                "-fx-background-color: white;" +
+                        "-fx-background-radius: 14;" +
+                        "-fx-border-color: #818CF8;" +
+                        "-fx-border-width: 1.5;" +
+                        "-fx-border-radius: 14;" +
+                        "-fx-effect: dropshadow(three-pass-box, rgba(99, 102, 241, 0.08), 12, 0, 0, 4);");
+
+        // 1. Election Selection Field
+        VBox electionBox = new VBox(6);
+        Label electionLabel = new Label("Target Election *");
+        electionLabel.setStyle("-fx-font-weight: bold; -fx-text-fill: " + TEXT + "; -fx-font-size: 13px;");
+
+        ComboBox<String> electionDropdown = new ComboBox<>();
+        electionDropdown.setPromptText("Loading organization elections...");
+        electionDropdown.setMaxWidth(Double.MAX_VALUE);
+        electionDropdown.setStyle(
+                "-fx-background-color: #F8FAFC;" +
+                        "-fx-border-color: " + BORDER + ";" +
+                        "-fx-border-radius: 8;" +
+                        "-fx-background-radius: 8;" +
+                        "-fx-padding: 8;" +
+                        "-fx-font-size: 13px;");
+
+        electionBox.getChildren().addAll(electionLabel, electionDropdown);
+
+        // 2. Position Field
+        VBox posBox = new VBox(6);
+        Label posLabel = new Label("Contested Office / Position *");
+        posLabel.setStyle("-fx-font-weight: bold; -fx-text-fill: " + TEXT + "; -fx-font-size: 13px;");
+
+        ComboBox<String> positionDropdown = new ComboBox<>();
+        positionDropdown.setPromptText("Select or enter position (e.g. President, Secretary)");
+        positionDropdown.setEditable(true);
+        positionDropdown.setMaxWidth(Double.MAX_VALUE);
+        positionDropdown.setStyle(
+                "-fx-background-color: #F8FAFC;" +
+                        "-fx-border-color: " + BORDER + ";" +
+                        "-fx-border-radius: 8;" +
+                        "-fx-background-radius: 8;" +
+                        "-fx-padding: 8;" +
+                        "-fx-font-size: 13px;");
+
+        posBox.getChildren().addAll(posLabel, positionDropdown);
+
+        // 3. Name Field
+        VBox nameBox = createFormField("Full Candidate Name *", "Enter your legal registered name");
+        TextField nameField = (TextField) nameBox.getChildren().get(1);
+        if (SessionManager.voterName != null && !SessionManager.voterName.isBlank()) {
+            nameField.setText(SessionManager.voterName);
+        }
+
+        // 4. Mobile Field
+        VBox mobileBox = createFormField("Contact Mobile Number *", "Enter your active phone number");
+        TextField mobileField = (TextField) mobileBox.getChildren().get(1);
+        if (SessionManager.voterPhone != null && !SessionManager.voterPhone.isBlank()) {
+            mobileField.setText(SessionManager.voterPhone);
+        }
+
+        // 5. Email Field
+        VBox emailBox = createFormField("Institutional Email Address *", "Enter your verified email address");
+        TextField emailField = (TextField) emailBox.getChildren().get(1);
+        if (SessionManager.voterEmail != null && !SessionManager.voterEmail.isBlank()) {
+            emailField.setText(SessionManager.voterEmail);
+        }
+
+        // 6. Manifesto Statement
+        VBox descFieldBox = new VBox(6);
+        Label descLabel = new Label("Candidate Statement & Manifesto *");
+        descLabel.setStyle("-fx-font-weight: bold; -fx-text-fill: " + TEXT + "; -fx-font-size: 13px;");
+
+        TextArea descArea = new TextArea();
+        descArea.setPromptText(
+                "Present your qualifications, vision, and core campaign promises for eligible voters to review...");
+        descArea.setPrefRowCount(4);
+        descArea.setStyle(
+                "-fx-background-color: #F8FAFC;" +
+                        "-fx-border-color: " + BORDER + ";" +
+                        "-fx-border-radius: 8;" +
+                        "-fx-background-radius: 8;" +
+                        "-fx-font-size: 13px;");
+        descFieldBox.getChildren().addAll(descLabel, descArea);
+
+        Label statusMsg = new Label();
+        statusMsg.setStyle("-fx-font-weight: bold; -fx-font-size: 12.5px;");
+        statusMsg.setVisible(false);
+
+        // Load elections from Firestore asynchronously
+        List<ElectionData> loadedElections = new ArrayList<>();
+        Thread loadThread = new Thread(() -> {
+            try {
+                String joinCode = SessionManager.joinCode;
+                String idToken = SessionManager.idToken;
+                if (joinCode != null && !joinCode.isBlank()) {
+                    List<ElectionData> elecs = ElectionDAO.getElectionsByOrg(joinCode, idToken);
+                    Platform.runLater(() -> {
+                        loadedElections.clear();
+                        loadedElections.addAll(elecs);
+                        electionDropdown.getItems().clear();
+
+                        if (elecs.isEmpty()) {
+                            electionDropdown.setPromptText("No elections open in organization");
+                        } else {
+                            for (ElectionData e : elecs) {
+                                String t = e.getTitle() != null ? e.getTitle() : "Untitled Election";
+                                electionDropdown.getItems().add(t);
+                            }
+                            if (preselectedElectionTitle != null
+                                    && electionDropdown.getItems().contains(preselectedElectionTitle)) {
+                                electionDropdown.setValue(preselectedElectionTitle);
+                            } else {
+                                electionDropdown.getSelectionModel().selectFirst();
+                            }
+                        }
+                    });
+                }
+            } catch (Exception ex) {
+                ex.printStackTrace();
+            }
+        });
+        loadThread.setDaemon(true);
+        loadThread.start();
+
+        // Update positions whenever an election is selected
+        electionDropdown.setOnAction(e -> {
+            String selTitle = electionDropdown.getValue();
+            if (selTitle != null) {
+                ElectionData match = loadedElections.stream()
+                        .filter(el -> selTitle.equals(el.getTitle()))
+                        .findFirst()
+                        .orElse(null);
+                positionDropdown.getItems().clear();
+                if (match != null && match.getPositions() != null && !match.getPositions().isEmpty()) {
+                    positionDropdown.getItems().addAll(match.getPositions());
+                    positionDropdown.getSelectionModel().selectFirst();
+                } else {
+                    positionDropdown.getItems().addAll("President", "Vice President", "Secretary", "Treasurer",
+                            "Representative");
+                    positionDropdown.getSelectionModel().selectFirst();
+                }
+            }
+        });
+
+        HBox buttonRow = new HBox(12);
+        buttonRow.setAlignment(Pos.CENTER_RIGHT);
+
+        Button cancelBtn = new Button("Cancel");
+        cancelBtn.setStyle(
+                "-fx-background-color: #F1F5F9;" +
+                        "-fx-text-fill: #334155;" +
+                        "-fx-font-weight: bold;" +
+                        "-fx-padding: 10 20;" +
+                        "-fx-background-radius: 8;" +
+                        "-fx-cursor: hand;");
+        cancelBtn.setOnAction(e -> VoterDashboard.returnHomeFromVoting());
+
+        Button submitBtn = new Button("Submit Nomination Application 🚀");
+        submitBtn.setStyle(
+                "-fx-background-color: linear-gradient(to right, #10B981, #059669);" +
+                        "-fx-text-fill: white;" +
+                        "-fx-font-weight: bold;" +
+                        "-fx-padding: 10 24;" +
+                        "-fx-background-radius: 8;" +
+                        "-fx-cursor: hand;");
+
+        submitBtn.setOnAction(e -> {
+            String selectedElection = electionDropdown.getValue();
+            String selectedPos = positionDropdown.getValue() != null ? positionDropdown.getValue().toString().trim()
+                    : "";
+            String name = nameField.getText().trim();
+            String mobile = mobileField.getText().trim();
+            String email = emailField.getText().trim();
+            String manifesto = descArea.getText().trim();
+
+            if (selectedElection == null || selectedPos.isEmpty() || name.isEmpty() || mobile.isEmpty()
+                    || email.isEmpty() || manifesto.isEmpty()) {
+                statusMsg.setText("⚠️ Please fill in all required nomination fields.");
+                statusMsg.setStyle("-fx-text-fill: " + RED + "; -fx-font-weight: bold;");
+                statusMsg.setVisible(true);
+                return;
+            }
+
+            submitBtn.setDisable(true);
+            submitBtn.setText("Submitting to Cloud...");
+            statusMsg.setText("Transmitting nomination to Firebase...");
+            statusMsg.setStyle("-fx-text-fill: " + BLUE + "; -fx-font-weight: bold;");
+            statusMsg.setVisible(true);
+
+            String candidateId = UUID.randomUUID().toString();
+            String joinCode = SessionManager.joinCode != null ? SessionManager.joinCode : "DEMO_ORG";
+            String idToken = SessionManager.idToken != null ? SessionManager.idToken : "";
+
+            ElectionData match = loadedElections.stream()
+                    .filter(el -> selectedElection.equals(el.getTitle()))
+                    .findFirst()
+                    .orElse(null);
+            String electionId = match != null ? match.getId() : selectedElection;
+
+            Candidate candidate = new Candidate(
+                    candidateId,
+                    electionId,
+                    selectedElection,
+                    selectedPos,
+                    name,
+                    email,
+                    mobile,
+                    manifesto,
+                    joinCode);
+
+            Thread submitThread = new Thread(() -> {
+                try {
+                    boolean ok = CandidateDAO.saveCandidate(candidate, idToken);
+                    Platform.runLater(() -> {
+                        submitBtn.setDisable(false);
+                        submitBtn.setText("Submit Nomination Application 🚀");
+                        if (ok) {
+                            showApplicationSuccessScreen(selectedElection, selectedPos, name, email, manifesto);
+                        } else {
+                            statusMsg.setText("✕ Submission failed. Please verify your connection.");
+                            statusMsg.setStyle("-fx-text-fill: " + RED + "; -fx-font-weight: bold;");
+                        }
+                    });
+                } catch (Exception ex) {
+                    ex.printStackTrace();
+                    Platform.runLater(() -> {
+                        submitBtn.setDisable(false);
+                        submitBtn.setText("Submit Nomination Application 🚀");
+                        statusMsg.setText("✕ Error submitting: " + ex.getMessage());
+                        statusMsg.setStyle("-fx-text-fill: " + RED + "; -fx-font-weight: bold;");
+                    });
+                }
+            });
+            submitThread.setDaemon(true);
+            submitThread.start();
+        });
+
+        buttonRow.getChildren().addAll(cancelBtn, submitBtn);
+
+        formCard.getChildren().addAll(
+                electionBox, posBox, nameBox, mobileBox, emailBox, descFieldBox, statusMsg, new Separator(), buttonRow);
+
+        formContainer.getChildren().addAll(heading, new Separator(), formCard);
+
+        VBox wrapper = new VBox(scrollPane);
+        VBox.setVgrow(scrollPane, Priority.ALWAYS);
+        return wrapper;
+    }
+
+    private static void showApplicationSuccessScreen(String election, String position, String name, String email,
+            String manifesto) {
+        VBox successBox = new VBox(18);
+        successBox.setAlignment(Pos.CENTER);
+        successBox.setPadding(new Insets(40));
+        successBox.setStyle("-fx-background-color: linear-gradient(to bottom, #F8FAFC, #EEF2F6);");
+
+        VBox card = new VBox(14);
+        card.setAlignment(Pos.CENTER);
+        card.setMaxWidth(560);
+        card.setPadding(new Insets(32));
+        card.setStyle(
+                "-fx-background-color: white;" +
+                        "-fx-background-radius: 14;" +
+                        "-fx-border-color: #10B981;" +
+                        "-fx-border-width: 1.8;" +
+                        "-fx-border-radius: 14;" +
+                        "-fx-effect: dropshadow(three-pass-box, rgba(16, 185, 129, 0.12), 16, 0, 0, 5);");
+
+        Label icon = new Label("🎉");
+        icon.setFont(Font.font(46));
+
+        Text title = new Text("Nomination Submitted Successfully!");
+        title.setFont(Font.font("Arial", FontWeight.BOLD, 22));
+        title.setFill(Color.web("#064E3B"));
+
+        Text desc = new Text("Your candidate application for " + position + " (" + election
+                + ") has been uploaded to Firebase Firestore and is pending review by the election administrator.");
+        desc.setFont(Font.font(13));
+        desc.setFill(Color.web(SECONDARY));
+        desc.setWrappingWidth(480);
+        desc.setTextAlignment(javafx.scene.text.TextAlignment.CENTER);
+
+        HBox btnRow = new HBox(12);
+        btnRow.setAlignment(Pos.CENTER);
+
+        Button viewMyApps = new Button("View My Applications 📄");
+        viewMyApps.setStyle(
+                "-fx-background-color: #2563EB;" +
+                        "-fx-text-fill: white;" +
+                        "-fx-font-weight: bold;" +
+                        "-fx-font-size: 13px;" +
+                        "-fx-padding: 10 20;" +
+                        "-fx-background-radius: 8;" +
+                        "-fx-cursor: hand;");
+        viewMyApps.setOnAction(e -> VoterDashboard.showPage(MyApplication.createMyApplicationView()));
+
+        Button homeBtn = new Button("Return to Home ⌂");
+        homeBtn.setStyle(
+                "-fx-background-color: #F1F5F9;" +
+                        "-fx-text-fill: #334155;" +
+                        "-fx-font-weight: bold;" +
+                        "-fx-font-size: 13px;" +
+                        "-fx-padding: 10 20;" +
+                        "-fx-background-radius: 8;" +
+                        "-fx-cursor: hand;");
+        homeBtn.setOnAction(e -> VoterDashboard.returnHomeFromVoting());
+
+        btnRow.getChildren().addAll(homeBtn, viewMyApps);
+
+        card.getChildren().addAll(icon, title, desc, new Separator(), btnRow);
+        successBox.getChildren().add(card);
+
+        VoterDashboard.showPage(successBox);
+    }
+
+    private static VBox createFormField(String labelText, String promptText) {
+        VBox box = new VBox(6);
+        Label label = new Label(labelText);
+        label.setStyle("-fx-font-weight: bold; -fx-text-fill: " + TEXT + "; -fx-font-size: 13px;");
+
+        TextField textField = new TextField();
+        textField.setPromptText(promptText);
+        textField.setStyle(
+                "-fx-background-color: #F8FAFC;" +
+                        "-fx-border-color: " + BORDER + ";" +
+                        "-fx-border-radius: 8;" +
+                        "-fx-background-radius: 8;" +
+                        "-fx-padding: 10;" +
+                        "-fx-font-size: 13px;");
+        box.getChildren().addAll(label, textField);
+        return box;
+    }
+}

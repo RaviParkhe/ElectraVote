@@ -6,7 +6,7 @@
 
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>com.elctrovotesuperx</groupId>
+    <groupId>com.electrovotesuperx</groupId>
     <artifactId>electrovote</artifactId>
     <version>1.0-SNAPSHOT</version>
 
@@ -63,6 +63,14 @@
             <version>1.7.36</version>
         </dependency>
 
+        <!-- JUnit 5 for Testing -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>5.10.2</version>
+            <scope>test</scope>
+        </dependency>
+
     </dependencies>
 
     <build>
@@ -75,7 +83,7 @@
                 <version>0.0.8</version>
 
                 <configuration>
-                    <mainClass>com.elctrovotesuperx.Main</mainClass>
+                    <mainClass>com.electrovotesuperx.Main</mainClass>
                 </configuration>
 
             </plugin>
