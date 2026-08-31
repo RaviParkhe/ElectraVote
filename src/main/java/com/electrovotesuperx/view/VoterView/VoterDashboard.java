@@ -383,6 +383,35 @@ public class VoterDashboard extends Application {
                 createCustomStatCard("Active Ballots", statValue2, "Pending ballots", "#1464F4"),
                 createCustomStatCard("Current Membership", statValue3, "Active Context", "#7B4DFF"));
 
+        VBox pendingBanner = new VBox(6);
+        boolean isPending = "PENDING".equalsIgnoreCase(SessionManager.voterStatus);
+        if (isPending) {
+            pendingBanner.setPadding(new Insets(14, 18, 14, 18));
+            pendingBanner.setStyle(
+                    "-fx-background-color: #FFFBEB;" +
+                            "-fx-background-radius: 10;" +
+                            "-fx-border-color: #F59E0B;" +
+                            "-fx-border-width: 1.5;" +
+                            "-fx-border-radius: 10;");
+
+            HBox pHeader = new HBox(8);
+            pHeader.setAlignment(Pos.CENTER_LEFT);
+            Label pIcon = new Label("⏳");
+            pIcon.setStyle("-fx-font-size: 16px;");
+
+            Label pTitle = new Label("MEMBERSHIP APPROVAL PENDING");
+            pTitle.setStyle("-fx-font-weight: 900; -fx-text-fill: #92400E; -fx-font-size: 13px;");
+            pHeader.getChildren().addAll(pIcon, pTitle);
+
+            Text pText = new Text("Your voter membership in '" + orgName + "' is awaiting administrator approval. Voting and candidate features are locked until the admin accepts your request in their Admin Portal.");
+            pText.setFill(Color.web("#78350F"));
+            pText.setFont(Font.font("Segoe UI", 12.5));
+            pendingBanner.getChildren().addAll(pHeader, pText);
+        } else {
+            pendingBanner.setVisible(false);
+            pendingBanner.setManaged(false);
+        }
+
         // Live Winner Alert Banner (Dynamically populated)
         VBox winnerBanner = new VBox(6);
         winnerBanner.setVisible(false);
@@ -419,34 +448,37 @@ public class VoterDashboard extends Application {
                     String topLeadInfo = null;
                     for (ElectionData el : elecs) {
                         try {
-                            Map<String, Map<String, Integer>> res = com.electrovotesuperx.dao.AdminDAO.VoteDAO.getResults(el.getId(), SessionManager.idToken);
-                            if (res != null) {
-                                for (Map.Entry<String, Map<String, Integer>> pEntry : res.entrySet()) {
+                            Map<String, Map<String, Integer>> results = com.electrovotesuperx.dao.AdminDAO.VoteDAO.getResults(el.getId(), SessionManager.idToken);
+                            if (results != null && !results.isEmpty()) {
+                                for (Map.Entry<String, Map<String, Integer>> entry : results.entrySet()) {
+                                    String pos = entry.getKey();
+                                    Map<String, Integer> counts = entry.getValue();
+                                    String leadCand = "";
                                     int maxV = -1;
-                                    String topC = null;
-                                    for (Map.Entry<String, Integer> cv : pEntry.getValue().entrySet()) {
-                                        if (cv.getValue() > maxV) {
-                                            maxV = cv.getValue();
-                                            topC = cv.getKey();
+                                    for (Map.Entry<String, Integer> cEntry : counts.entrySet()) {
+                                        if (cEntry.getValue() > maxV) {
+                                            maxV = cEntry.getValue();
+                                            leadCand = cEntry.getKey();
                                         }
                                     }
-                                    if (maxV > 0 && topC != null) {
-                                        topLeadInfo = "🏆 " + topC + " is currently leading '" + el.getTitle() + "' (" + pEntry.getKey() + ") with " + maxV + " votes!";
+                                    if (maxV > 0) {
+                                        topLeadInfo = el.getTitle() + " • " + pos + ": " + leadCand + " is leading (" + maxV + " votes)";
                                         break;
                                     }
                                 }
                             }
-                        } catch (Exception ignored) {}
+                        } catch (Exception ignoredVote) {}
                         if (topLeadInfo != null) break;
                     }
 
-                    final String finalTopLead = topLeadInfo;
-                    final int elecCount = elecs.size();
-
+                    final int ballotCount = elecs.size();
+                    final String finalLead = topLeadInfo;
                     Platform.runLater(() -> {
-                        if (statValue2 != null) statValue2.setText(String.valueOf(elecCount));
-                        if (finalTopLead != null) {
-                            winnerText.setText(finalTopLead);
+                        if (statValue2 != null) {
+                            statValue2.setText(String.valueOf(ballotCount));
+                        }
+                        if (finalLead != null) {
+                            winnerText.setText(finalLead);
                             winnerBanner.setVisible(true);
                             winnerBanner.setManaged(true);
                             com.electrovotesuperx.utils.UIAnimationHelper.fadeInSlideUp(winnerBanner, 100);
@@ -482,7 +514,7 @@ public class VoterDashboard extends Application {
         banner.getChildren().addAll(bannerTitle, bannerDesc);
         com.electrovotesuperx.utils.UIAnimationHelper.addCardHover(banner);
 
-        content.getChildren().addAll(heading, winnerBanner, statsRow, banner);
+        content.getChildren().addAll(heading, pendingBanner, winnerBanner, statsRow, banner);
 
         VBox wrapper = new VBox(scrollPane);
         VBox.setVgrow(scrollPane, Priority.ALWAYS);
@@ -520,7 +552,7 @@ public class VoterDashboard extends Application {
         if (sidebarOrgNameText != null)
             sidebarOrgNameText.setText(organizationName);
         if (sidebarRoleText != null)
-            sidebarRoleText.setText(fullName + " (" + role + ")");
+            sidebarRoleText.setText(fullName + " (" + verificationStatus + ")");
         if (homeWelcomeTitleText != null)
             homeWelcomeTitleText.setText("Welcome back, " + fullName + "! 👋");
         if (statValue1 != null)
@@ -535,14 +567,17 @@ public class VoterDashboard extends Application {
         if (sidebarOrgNameText != null) {
             sidebarOrgNameText.setText(orgName);
         }
+        if (sidebarRoleText != null) {
+            String voterName = SessionManager.voterName != null && !SessionManager.voterName.isBlank()
+                    ? SessionManager.voterName : "Voter";
+            sidebarRoleText.setText(voterName + " (" + status + ")");
+        }
         if (statValue1 != null)
             statValue1.setText(status);
         if (statValue2 != null)
             statValue2.setText(activeBallotsCount);
         if (statValue3 != null)
             statValue3.setText(orgName);
-
-        returnHomeFromVoting();
     }
 
     public static void returnHomeFromVoting() {

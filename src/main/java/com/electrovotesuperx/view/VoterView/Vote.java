@@ -389,6 +389,46 @@ public class Vote {
         heading.getChildren().addAll(title, subtitle);
 
         VBox electionsList = new VBox(14);
+
+        // Security check: Only ACCEPTED or VERIFIED voters are authorized to view ballots or vote
+        boolean isApproved = "ACCEPTED".equalsIgnoreCase(SessionManager.voterStatus) || "VERIFIED".equalsIgnoreCase(SessionManager.voterStatus);
+        if (!isApproved) {
+            VBox pendingCard = new VBox(14);
+            pendingCard.setAlignment(Pos.CENTER);
+            pendingCard.setPadding(new Insets(35));
+            pendingCard.setStyle("-fx-background-color: #FFFBEB; -fx-background-radius: 12; -fx-border-color: #F59E0B; -fx-border-width: 1.5; -fx-border-radius: 12; -fx-effect: dropshadow(three-pass-box, rgba(245, 158, 11, 0.12), 8, 0, 0, 3);");
+
+            Label warnIcon = new Label("⏳");
+            warnIcon.setFont(Font.font(36));
+
+            Text warnTitle = new Text("Voting Access Locked: Administrator Approval Required");
+            warnTitle.setFont(Font.font("Arial", FontWeight.BOLD, 18));
+            warnTitle.setFill(Color.web("#92400E"));
+
+            String currentOrgName = SessionManager.organizationName != null && !SessionManager.organizationName.isBlank()
+                    ? SessionManager.organizationName : (SessionManager.joinCode != null ? SessionManager.joinCode : "your organization");
+            String currentCode = SessionManager.joinCode != null ? SessionManager.joinCode : "";
+
+            Text warnMsg = new Text(
+                    "Your membership in '" + currentOrgName + "' (" + currentCode + ") is currently PENDING.\n\n" +
+                    "To prevent unauthorized ballot submissions, your organization's Administrator must review and ACCEPT your registration in their Admin Portal (Admin > Voters) before you can view candidate rosters or cast votes.");
+            warnMsg.setFill(Color.web("#78350F"));
+            warnMsg.setFont(Font.font(13));
+            warnMsg.setWrappingWidth(680);
+            warnMsg.setTextAlignment(javafx.scene.text.TextAlignment.CENTER);
+
+            Button myOrgBtn = new Button("🏢 Manage Memberships & Track Status in 'My Organization'");
+            myOrgBtn.setStyle("-fx-background-color: #D97706; -fx-text-fill: white; -fx-font-weight: bold; -fx-font-size: 13px; -fx-padding: 10 20; -fx-background-radius: 8; -fx-cursor: hand;");
+            myOrgBtn.setOnAction(ev -> VoterDashboard.showPage(MyOrganization.createMyOrganizationView()));
+
+            pendingCard.getChildren().addAll(warnIcon, warnTitle, warnMsg, myOrgBtn);
+            content.getChildren().addAll(heading, new Separator(), pendingCard);
+
+            VBox wrapper = new VBox(scrollPane);
+            VBox.setVgrow(scrollPane, Priority.ALWAYS);
+            return wrapper;
+        }
+
         VBox loadingBox = new VBox(10);
         loadingBox.setAlignment(Pos.CENTER);
         loadingBox.setPadding(new Insets(30));

@@ -81,15 +81,22 @@ public class PollingOfficerService {
             if (auth.isSuccess()) {
                 uid = auth.getLocalId();
                 idToken = auth.getIdToken();
-            } else if (auth.getMessage() != null && auth.getMessage().contains("EMAIL_EXISTS")) {
-                // If account exists, attempt sign in to get tokens
+            } else if (auth.getMessage() != null && (auth.getMessage().contains("EMAIL_EXISTS") || auth.getMessage().toLowerCase().contains("already registered"))) {
+                // If account exists, attempt sign in with provided password to authenticate
                 System.out.println("[PollingOfficerService] Email exists, attempting signIn with provided password...");
                 FirebaseAuthService.AuthResult signIn = FirebaseAuthService.signIn(email, password);
                 if (!signIn.isSuccess()) {
-                    return new OfficerRegistrationResult(false, "An account with this email already exists with a different password. Please check your credentials.", null, null);
+                    if (SessionManager.idToken != null && !SessionManager.idToken.isBlank()
+                            && SessionManager.loggedInEmail != null && SessionManager.loggedInEmail.equalsIgnoreCase(email)) {
+                        uid = SessionManager.voterUid != null ? SessionManager.voterUid : (SessionManager.officerUid != null ? SessionManager.officerUid : (SessionManager.adminUid != null ? SessionManager.adminUid : signIn.getLocalId()));
+                        idToken = SessionManager.idToken;
+                    } else {
+                        return new OfficerRegistrationResult(false, "An account with this email already exists. Please enter your existing password to submit your Polling Officer application.", null, null);
+                    }
+                } else {
+                    uid = signIn.getLocalId();
+                    idToken = signIn.getIdToken();
                 }
-                uid = signIn.getLocalId();
-                idToken = signIn.getIdToken();
             } else {
                 return new OfficerRegistrationResult(false, auth.getMessage(), null, null);
             }
@@ -259,10 +266,17 @@ public class PollingOfficerService {
     // HELPER: RTDB WRITE & READ
     // =========================================================
 
+    private static String buildRtdbUrl(String path, String idToken) {
+        String auth = (idToken != null && !idToken.isBlank()) 
+                ? "?auth=" + java.net.URLEncoder.encode(idToken, StandardCharsets.UTF_8) 
+                : "";
+        return FirebaseConfig.DATABASE_URL + path + auth;
+    }
+
     private static void saveToRealtimeDb(
             String uid, String name, String email, String station, String phone, String status, String approvalPin, String idToken) {
         try {
-            String url = FirebaseConfig.DATABASE_URL + "/polling_officer_requests/" + uid + ".json?auth=" + idToken;
+            String url = buildRtdbUrl("/polling_officer_requests/" + uid + ".json", idToken);
             JsonObject obj = new JsonObject();
             obj.addProperty("uid", uid);
             obj.addProperty("name", name);
@@ -280,28 +294,32 @@ public class PollingOfficerService {
                     .PUT(HttpRequest.BodyPublishers.ofString(obj.toString(), StandardCharsets.UTF_8))
                     .build();
 
-            CLIENT.send(req, HttpResponse.BodyHandlers.ofString());
-        } catch (Exception ignored) {
+            HttpResponse<String> res = CLIENT.send(req, HttpResponse.BodyHandlers.ofString());
+            System.out.println("[PollingOfficerService] RealtimeDB save status: " + res.statusCode());
+        } catch (Exception e) {
+            System.err.println("[PollingOfficerService] RealtimeDB save error: " + e.getMessage());
         }
     }
 
     private static void updateRealtimeDbStatus(String uid, String status, String idToken) {
         try {
-            String url = FirebaseConfig.DATABASE_URL + "/polling_officer_requests/" + uid + "/status.json?auth=" + idToken;
+            String url = buildRtdbUrl("/polling_officer_requests/" + uid + "/status.json", idToken);
             HttpRequest req = HttpRequest.newBuilder()
                     .uri(URI.create(url))
                     .header("Content-Type", "application/json")
                     .PUT(HttpRequest.BodyPublishers.ofString("\"" + status + "\"", StandardCharsets.UTF_8))
                     .build();
 
-            CLIENT.send(req, HttpResponse.BodyHandlers.ofString());
-        } catch (Exception ignored) {
+            HttpResponse<String> res = CLIENT.send(req, HttpResponse.BodyHandlers.ofString());
+            System.out.println("[PollingOfficerService] RealtimeDB update status: " + res.statusCode());
+        } catch (Exception e) {
+            System.err.println("[PollingOfficerService] RealtimeDB update error: " + e.getMessage());
         }
     }
 
     private static String checkRealtimeDbStatus(String uid, String idToken) {
         try {
-            String url = FirebaseConfig.DATABASE_URL + "/polling_officer_requests/" + uid + ".json?auth=" + idToken;
+            String url = buildRtdbUrl("/polling_officer_requests/" + uid + ".json", idToken);
             HttpRequest req = HttpRequest.newBuilder()
                     .uri(URI.create(url))
                     .GET()
@@ -314,14 +332,15 @@ public class PollingOfficerService {
                     return json.get("status").getAsString();
                 }
             }
-        } catch (Exception ignored) {
+        } catch (Exception e) {
+            System.err.println("[PollingOfficerService] RealtimeDB check error: " + e.getMessage());
         }
         return null;
     }
 
     private static String getRealtimeDbPin(String uid, String idToken) {
         try {
-            String url = FirebaseConfig.DATABASE_URL + "/polling_officer_requests/" + uid + ".json?auth=" + idToken;
+            String url = buildRtdbUrl("/polling_officer_requests/" + uid + ".json", idToken);
             HttpRequest req = HttpRequest.newBuilder()
                     .uri(URI.create(url))
                     .GET()
@@ -334,7 +353,8 @@ public class PollingOfficerService {
                     return json.get("approvalPin").getAsString();
                 }
             }
-        } catch (Exception ignored) {
+        } catch (Exception e) {
+            System.err.println("[PollingOfficerService] RealtimeDB PIN error: " + e.getMessage());
         }
         return null;
     }

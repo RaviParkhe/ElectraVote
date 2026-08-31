@@ -4,6 +4,8 @@ import com.electrovotesuperx.controller.OfflineController.OfflineVerificationCon
 import com.electrovotesuperx.dao.OfflineDAO.ElectionDAO;
 import com.electrovotesuperx.exception.DatabaseException;
 import com.electrovotesuperx.model.OfflineModel.Election;
+import com.electrovotesuperx.model.OfflineModel.Voter;
+import com.electrovotesuperx.service.OfflineService.TwilioOtpService;
 import com.electrovotesuperx.service.OfflineService.VoterVerificationService;
 import com.electrovotesuperx.view.CommonView.Header;
 import com.electrovotesuperx.view.CommonView.Sidebar;
@@ -15,6 +17,7 @@ import javafx.animation.PauseTransition;
 import javafx.animation.ScaleTransition;
 import javafx.animation.Timeline;
 import javafx.animation.TranslateTransition;
+import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
@@ -34,13 +37,25 @@ import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.shape.Circle;
+import com.electrovotesuperx.config.SessionManager;
+import com.electrovotesuperx.config.firebaseConfig.FirebaseConfig;
+import com.google.gson.JsonObject;
+import javafx.scene.web.WebView;
 import javafx.util.Duration;
 
+import java.net.URI;
+import java.net.URLEncoder;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Timer;
 import java.util.TimerTask;
 
 public class OfflineVerification {
+
+        private static final HttpClient HTTP_CLIENT = HttpClient.newHttpClient();
 
         // =========================================================
         // FIELDS
@@ -831,7 +846,7 @@ public class OfflineVerification {
         }
 
         // =========================================================
-        // VERIFY VOTER
+        // VERIFY VOTER (TWILIO SMS OTP FLOW)
         // =========================================================
 
         private void performVerification() {
@@ -839,120 +854,256 @@ public class OfflineVerification {
                 Election election = electionBox.getValue();
 
                 if (election == null) {
-
-                        showError(
-                                        "Please select an active election.");
-
+                        showError("Please select an active election.");
                         return;
                 }
 
-                String voterId = voterIdField
-                                .getText()
-                                .trim();
+                String voterId = voterIdField.getText().trim();
 
                 if (voterId.isEmpty()) {
-
-                        showError(
-                                        "Please enter the Voter ID.");
-
+                        showError("Please enter the Voter ID.");
                         return;
                 }
 
                 // =====================================================
-                // DISABLE WHILE VERIFYING
+                // DISABLE WHILE VERIFYING ELIGIBILITY
                 // =====================================================
 
                 verify.setDisable(true);
-
-                verify.setText(
-                                "Verifying...");
+                verify.setText("Checking eligibility...");
 
                 try {
+                        VoterVerificationService.EligibilityResult eligibility =
+                                controller.validateEligibility(voterId, election.getElectionId());
 
-                        VoterVerificationService.VerificationResult verification = controller.verify(
-                                        voterId,
-                                        election.getElectionId());
-
-                        if (verification.success()) {
-
-                                // =========================================
-                                // OTP STEP
-                                // Store the pending result and show OTP card
-                                // =========================================
-
-                                pendingResult = verification;
-
-                                String otp = controller.generateOtp(
-                                                election.getElectionId(),
-                                                voterId);
-
-                                // Live SMS Dispatch (Background thread)
-                                final String finalOtp = otp;
-                                final String voterName = verification.voter() != null ? verification.voter().getFullName() : "Voter";
-                                final String voterPhone = verification.voter() != null ? verification.voter().getPhone() : null;
-                                new Thread(() -> {
-                                    try {
-                                        if (voterPhone != null && !voterPhone.isBlank()) {
-                                            com.electrovotesuperx.service.OfflineService.ClerkOtpService.sendSmsOtp(voterPhone, finalOtp, voterName);
-                                        }
-                                    } catch (Throwable ignored) {}
-                                }).start();
-
-                                showOtpCard(
-                                                otp,
-                                                election.getElectionId(),
-                                                voterId,
-                                                verification.voter().getFullName(),
-                                                verification.voter().getVoterId(),
-                                                voterPhone,
-                                                verification.token());
-
-                        } else {
-
-                                showError(
-                                                verification.message());
-
-                                verify.setText(
-                                                "✓  Verify Voter");
-
+                        if (!eligibility.eligible()) {
+                                showError(eligibility.message());
+                                verify.setText("✓  Verify Voter");
                                 verify.setDisable(false);
+                                return;
                         }
 
+                        Voter voter = eligibility.voter();
+                        String phone = voter.getPhone();
+
+                        if (phone == null || phone.isBlank()) {
+                                showPhonePrompt(election.getElectionId(), voter);
+                                verify.setText("✓  Verify Voter");
+                                verify.setDisable(false);
+                                return;
+                        }
+
+                        // Send direct SMS OTP via Twilio
+                        sendTwilioSmsOtp(election.getElectionId(), voter, phone);
+
                 } catch (DatabaseException e) {
-
-                        showError(
-                                        "Unable to verify voter. Database error occurred.");
-
-                        verify.setText(
-                                        "✓  Verify Voter");
-
+                        showError("Unable to verify voter. Database error occurred: " + e.getMessage());
+                        verify.setText("✓  Verify Voter");
                         verify.setDisable(false);
-
                 } catch (Exception e) {
-
-                        showError(
-                                        "Unable to verify voter.\n"
-                                                        + e.getMessage());
-
-                        verify.setText(
-                                        "✓  Verify Voter");
-
+                        showError("Unable to verify voter: " + e.getMessage());
+                        verify.setText("✓  Verify Voter");
                         verify.setDisable(false);
                 }
         }
 
         // =========================================================
-        // OTP VERIFICATION CARD WITH ANIMATIONS
+        // INITIATE TWILIO SMS OTP DISPATCH
+        // =========================================================
+
+        private void sendTwilioSmsOtp(String electionId, Voter voter, String phone) {
+                showSmsSendingCard(electionId, voter, phone);
+
+                controller.sendTwilioSmsOtp(
+                                electionId,
+                                voter.getVoterId(),
+                                voter.getFullName(),
+                                phone,
+                                new TwilioOtpService.TwilioOtpCallback() {
+                                        @Override
+                                        public void onOtpSent(String generatedOtp, String formattedPhone) {
+                                                Platform.runLater(() -> {
+                                                        showOtpCard(electionId, voter, formattedPhone);
+                                                        verify.setText("✓  Verify Voter");
+                                                        verify.setDisable(false);
+                                                });
+                                        }
+
+                                        @Override
+                                        public void onError(String errorMessage) {
+                                                Platform.runLater(() -> {
+                                                        showOtpSendError(errorMessage, electionId, voter, phone);
+                                                        verify.setText("✓  Verify Voter");
+                                                        verify.setDisable(false);
+                                                });
+                                        }
+
+                                        @Override
+                                        public void onStatusUpdate(String status) {
+                                                System.out.println("[OfflineVerification] Status: " + status);
+                                        }
+                                });
+        }
+
+        // =========================================================
+        // SMS DISPATCHING LOADING CARD (CLEAN & FAST)
+        // =========================================================
+
+        private void showSmsSendingCard(String electionId, Voter voter, String phone) {
+                result.getChildren().clear();
+                result.setVisible(true);
+                result.setManaged(true);
+                result.setMaxWidth(Double.MAX_VALUE);
+                result.setFillWidth(true);
+                result.setPadding(new Insets(24));
+                result.setStyle(
+                                "-fx-background-color:#F8FAFC;" +
+                                                "-fx-background-radius:12;" +
+                                                "-fx-border-color:#CBD5E1;" +
+                                                "-fx-border-width:1;" +
+                                                "-fx-border-radius:12;");
+
+                HBox header = new HBox(12);
+                header.setAlignment(Pos.CENTER_LEFT);
+
+                Label icon = new Label("📡");
+                icon.setStyle("-fx-font-size:24px;");
+
+                VBox titleBox = new VBox(2);
+                Label title = new Label("Dispatching Twilio SMS OTP...");
+                title.setStyle("-fx-font-size:15px; -fx-font-weight:800; -fx-text-fill:#1E293B;");
+
+                String masked = TwilioOtpService.maskPhoneNumber(phone);
+                Label subtitle = new Label("Sending 6-digit verification code directly to " + voter.getFullName() + " (" + masked + ") via Twilio SMS gateway.");
+                subtitle.setStyle("-fx-font-size:12.5px; -fx-text-fill:#64748B;");
+
+                titleBox.getChildren().addAll(title, subtitle);
+                header.getChildren().addAll(icon, titleBox);
+
+                // Progress animation
+                Region track = new Region();
+                track.setPrefHeight(4);
+                track.setMaxWidth(Double.MAX_VALUE);
+                track.setStyle("-fx-background-color:#E2E8F0; -fx-background-radius:2;");
+
+                Region bar = new Region();
+                bar.setPrefHeight(4);
+                bar.setPrefWidth(120);
+                bar.setStyle("-fx-background-color:#0284C7; -fx-background-radius:2;");
+
+                StackPane progressStack = new StackPane();
+                progressStack.setAlignment(Pos.CENTER_LEFT);
+                progressStack.getChildren().addAll(track, bar);
+
+                TranslateTransition pulse = new TranslateTransition(Duration.seconds(0.8), bar);
+                pulse.setFromX(0);
+                pulse.setToX(350);
+                pulse.setCycleCount(Timeline.INDEFINITE);
+                pulse.setAutoReverse(true);
+                pulse.play();
+
+                result.getChildren().addAll(header, createVerticalSpace(14), progressStack);
+        }
+
+        // =========================================================
+        // PHONE NUMBER PROMPT (IF VOTER HAS NO REGISTERED PHONE)
+        // =========================================================
+
+        private void showPhonePrompt(String electionId, Voter voter) {
+                result.getChildren().clear();
+                result.setVisible(true);
+                result.setManaged(true);
+                result.setMaxWidth(Double.MAX_VALUE);
+                result.setFillWidth(true);
+                result.setPadding(new Insets(20));
+                result.setStyle(
+                                "-fx-background-color:#FFFBEB;" +
+                                                "-fx-background-radius:12;" +
+                                                "-fx-border-color:#FDE68A;" +
+                                                "-fx-border-width:1;" +
+                                                "-fx-border-radius:12;");
+
+                Label title = new Label("📱 Mobile Number Required for OTP");
+                title.setStyle("-fx-font-size:15px; -fx-font-weight:800; -fx-text-fill:#92400E;");
+
+                Label desc = new Label("Voter " + voter.getFullName() + " has no mobile number registered. Enter mobile number to send Twilio SMS OTP:");
+                desc.setStyle("-fx-font-size:12.5px; -fx-text-fill:#78350F;");
+
+                TextField phoneInput = new TextField();
+                phoneInput.setPromptText("Enter 10-digit mobile number, e.g. 9876543210");
+                phoneInput.setPrefHeight(42);
+                phoneInput.setStyle("-fx-background-color:#FFFFFF; -fx-border-color:#CBD5E1; -fx-border-radius:6; -fx-background-radius:6; -fx-font-size:13px; -fx-padding:0 10 0 10;");
+
+                Button sendBtn = new Button("Send Twilio SMS OTP  →");
+                sendBtn.setPrefHeight(42);
+                sendBtn.setStyle("-fx-background-color:#D97706; -fx-text-fill:white; -fx-font-weight:bold; -fx-background-radius:6; -fx-cursor:hand;");
+                sendBtn.setOnAction(e -> {
+                        String p = phoneInput.getText().trim();
+                        if (p.isEmpty()) {
+                                showError("Please enter a valid mobile number.");
+                                return;
+                        }
+                        sendTwilioSmsOtp(electionId, voter, p);
+                });
+
+                HBox row = new HBox(10, phoneInput, sendBtn);
+                HBox.setHgrow(phoneInput, Priority.ALWAYS);
+
+                result.getChildren().addAll(title, desc, createVerticalSpace(6), row);
+        }
+
+        // =========================================================
+        // SMS DISPATCH ERROR VIEW
+        // =========================================================
+
+        private void showOtpSendError(String errorMessage, String electionId, Voter voter, String phone) {
+                result.getChildren().clear();
+                result.setVisible(true);
+                result.setManaged(true);
+                result.setMaxWidth(Double.MAX_VALUE);
+                result.setFillWidth(true);
+                result.setPadding(new Insets(20));
+                result.setStyle(
+                                "-fx-background-color:#FEF2F2;" +
+                                                "-fx-background-radius:12;" +
+                                                "-fx-border-color:#FECACA;" +
+                                                "-fx-border-width:1;" +
+                                                "-fx-border-radius:12;");
+
+                Label errTitle = new Label("❌ Twilio SMS Notice");
+                errTitle.setStyle("-fx-font-size:15px; -fx-font-weight:800; -fx-text-fill:#991B1B;");
+
+                Label errMsg = new Label(errorMessage);
+                errMsg.setWrapText(true);
+                errMsg.setStyle("-fx-font-size:13px; -fx-text-fill:#B91C1C; -fx-font-weight:600;");
+
+                Label helpMsg = new Label("If you are testing offline or cellular networks are unavailable, you can use Officer Emergency Override.");
+                helpMsg.setWrapText(true);
+                helpMsg.setStyle("-fx-font-size:12px; -fx-text-fill:#7F1D1D;");
+
+                Button retryBtn = new Button("↻ Retry Twilio SMS");
+                retryBtn.setPrefHeight(38);
+                retryBtn.setStyle("-fx-background-color:#DC2626; -fx-text-fill:white; -fx-font-weight:bold; -fx-background-radius:6; -fx-cursor:hand;");
+                retryBtn.setOnAction(e -> sendTwilioSmsOtp(electionId, voter, phone));
+
+                Button overrideBtn = new Button("⚠️ Officer Emergency Override");
+                overrideBtn.setPrefHeight(38);
+                overrideBtn.setStyle("-fx-background-color:#475569; -fx-text-fill:white; -fx-font-weight:bold; -fx-background-radius:6; -fx-cursor:hand;");
+                overrideBtn.setOnAction(e -> executeEmergencyOverride(electionId, voter));
+
+                HBox btnRow = new HBox(10, retryBtn, overrideBtn);
+
+                result.getChildren().addAll(errTitle, errMsg, helpMsg, createVerticalSpace(8), btnRow);
+        }
+
+        // =========================================================
+        // OTP VERIFICATION CARD (TWILIO SMS)
         // =========================================================
 
         private void showOtpCard(
-                        String generatedOtp,
                         String electionId,
-                        String voterId,
-                        String voterName,
-                        String voterIdDisplay,
-                        String voterPhone,
-                        String token) {
+                        Voter voter,
+                        String formattedPhone) {
 
                 result.getChildren().clear();
                 result.setVisible(true);
@@ -971,13 +1122,11 @@ public class OfflineVerification {
                 result.setTranslateY(30);
                 result.setOpacity(0);
 
-                TranslateTransition slideIn = new TranslateTransition(
-                                Duration.millis(400), result);
+                TranslateTransition slideIn = new TranslateTransition(Duration.millis(350), result);
                 slideIn.setFromY(30);
                 slideIn.setToY(0);
 
-                FadeTransition fadeIn = new FadeTransition(
-                                Duration.millis(400), result);
+                FadeTransition fadeIn = new FadeTransition(Duration.millis(350), result);
                 fadeIn.setFromValue(0);
                 fadeIn.setToValue(1);
 
@@ -996,21 +1145,19 @@ public class OfflineVerification {
 
                 VBox otpTitleBox = new VBox(2);
 
-                Label otpTitle = new Label("OTP Sent to Voter's Mobile Device");
+                Label otpTitle = new Label("Twilio SMS OTP Dispatched to Voter");
                 otpTitle.setStyle(
                                 "-fx-font-size:16px;" +
                                                 "-fx-font-weight:800;" +
                                                 "-fx-text-fill:#1E3A5F;");
 
-                String maskedPhone = (voterPhone != null && voterPhone.length() >= 4)
-                        ? "ending in •••• " + voterPhone.substring(voterPhone.length() - 4)
-                        : "registered mobile number";
+                String maskedPhone = TwilioOtpService.maskPhoneNumber(formattedPhone);
 
                 Label otpSubtitle = new Label(
-                                "A 6-digit OTP was dispatched via Clerk SMS to " + voterName + " (" + maskedPhone + "). Ask the voter to provide the code.");
+                                "A 6-digit SMS OTP was sent to " + voter.getFullName() + " (" + maskedPhone + "). Ask the voter for the code.");
                 otpSubtitle.setStyle(
                                 "-fx-font-size:12.5px;" +
-                                                "-fx-text-fill:#3B82F6;" +
+                                                "-fx-text-fill:#0284C7;" +
                                                 "-fx-font-weight:600;");
 
                 otpTitleBox.getChildren().addAll(otpTitle, otpSubtitle);
@@ -1025,28 +1172,18 @@ public class OfflineVerification {
                 smsStatusBox.setPadding(new Insets(10, 14, 10, 14));
                 smsStatusBox.setStyle("-fx-background-color: #ECFDF5; -fx-background-radius: 8; -fx-border-color: #10B981; -fx-border-radius: 8;");
 
-                Label smsSentIcon = new Label("✅ Live SMS Dispatched");
+                Label smsSentIcon = new Label("✅ Live Twilio Carrier SMS Dispatched");
                 smsSentIcon.setStyle("-fx-font-size:12px; -fx-font-weight:bold; -fx-text-fill:#065F46;");
 
                 Region overrideSpacer = new Region();
                 HBox.setHgrow(overrideSpacer, Priority.ALWAYS);
 
-                Label overrideToggle = new Label("👁️ View OTP (Officer Override)");
+                Label overrideToggle = new Label("⚠️ Officer Emergency Override");
                 overrideToggle.setStyle("-fx-font-size:11px; -fx-text-fill:#64748B; -fx-cursor:hand; -fx-underline:true;");
 
-                Label revealedOtpLabel = new Label("Code: " + generatedOtp);
-                revealedOtpLabel.setStyle("-fx-font-size:13px; -fx-font-weight:bold; -fx-text-fill:#1E3A5F; -fx-background-color:#DBEAFE; -fx-padding:2 6; -fx-background-radius:4;");
-                revealedOtpLabel.setVisible(false);
-                revealedOtpLabel.setManaged(false);
+                overrideToggle.setOnMouseClicked(ev -> executeEmergencyOverride(electionId, voter));
 
-                overrideToggle.setOnMouseClicked(ev -> {
-                    boolean show = !revealedOtpLabel.isVisible();
-                    revealedOtpLabel.setVisible(show);
-                    revealedOtpLabel.setManaged(show);
-                    overrideToggle.setText(show ? "🙈 Hide OTP" : "👁️ View OTP (Officer Override)");
-                });
-
-                smsStatusBox.getChildren().addAll(smsSentIcon, overrideSpacer, revealedOtpLabel, overrideToggle);
+                smsStatusBox.getChildren().addAll(smsSentIcon, overrideSpacer, overrideToggle);
 
                 // =====================================================
                 // COUNTDOWN TIMER
@@ -1070,7 +1207,7 @@ public class OfflineVerification {
                 progressBar.setPrefHeight(4);
                 progressBar.setMaxWidth(Double.MAX_VALUE);
                 progressBar.setStyle(
-                                "-fx-background-color:#3B82C4;" +
+                                "-fx-background-color:#0284C7;" +
                                                 "-fx-background-radius:2;");
 
                 StackPane progressStack = new StackPane();
@@ -1081,18 +1218,16 @@ public class OfflineVerification {
                 // Animate progress bar over 60 seconds
                 Timeline progressTimeline = new Timeline(
                                 new KeyFrame(Duration.ZERO,
-                                                new KeyValue(progressBar.maxWidthProperty(),
-                                                                Double.MAX_VALUE)),
+                                                new KeyValue(progressBar.maxWidthProperty(), Double.MAX_VALUE)),
                                 new KeyFrame(Duration.seconds(60),
-                                                new KeyValue(progressBar.maxWidthProperty(),
-                                                                0)));
+                                                new KeyValue(progressBar.maxWidthProperty(), 0)));
                 progressTimeline.play();
 
                 // =====================================================
                 // 6 OTP INPUT BOXES
                 // =====================================================
 
-                Label enterLabel = new Label("Enter OTP:");
+                Label enterLabel = new Label("Enter 6-Digit SMS Code:");
                 enterLabel.setStyle(
                                 "-fx-font-size:12px;" +
                                                 "-fx-font-weight:700;" +
@@ -1121,11 +1256,19 @@ public class OfflineVerification {
                                                         "-fx-font-weight:800;" +
                                                         "-fx-text-fill:#1E3A5F;");
 
-                        // Auto-advance on digit entry
+                        // Auto-advance on digit entry & Paste support
                         final int idx = i;
                         field.textProperty().addListener((obs, oldVal, newVal) -> {
-
                                 if (newVal.length() > 1) {
+                                        // If pasted a multi-digit string (e.g. 6-digit OTP from SMS)
+                                        String cleaned = newVal.replaceAll("[^0-9]", "");
+                                        if (cleaned.length() >= 6) {
+                                                for (int k = 0; k < 6; k++) {
+                                                        otpInputFields[k].setText(String.valueOf(cleaned.charAt(k)));
+                                                }
+                                                otpInputFields[5].requestFocus();
+                                                return;
+                                        }
                                         field.setText(newVal.substring(0, 1));
                                         return;
                                 }
@@ -1137,11 +1280,10 @@ public class OfflineVerification {
 
                         // Focus style
                         field.focusedProperty().addListener((obs, oldVal, focused) -> {
-
                                 if (focused) {
                                         field.setStyle(
                                                         "-fx-background-color:#FFFFFF;" +
-                                                                        "-fx-border-color:#3B82C4;" +
+                                                                        "-fx-border-color:#0284C7;" +
                                                                         "-fx-border-width:2;" +
                                                                         "-fx-border-radius:8;" +
                                                                         "-fx-background-radius:8;" +
@@ -1190,11 +1332,11 @@ public class OfflineVerification {
                 // VERIFY OTP BUTTON
                 // =====================================================
 
-                Button verifyOtpBtn = new Button("🔓  Verify OTP");
-                verifyOtpBtn.setPrefWidth(170);
-                verifyOtpBtn.setPrefHeight(42);
+                Button verifyOtpBtn = new Button("🔓  Verify Twilio SMS OTP");
+                verifyOtpBtn.setPrefWidth(220);
+                verifyOtpBtn.setPrefHeight(44);
                 verifyOtpBtn.setStyle(
-                                "-fx-background-color:#1D6FA5;" +
+                                "-fx-background-color:#0284C7;" +
                                                 "-fx-text-fill:white;" +
                                                 "-fx-font-size:13px;" +
                                                 "-fx-font-weight:800;" +
@@ -1202,7 +1344,7 @@ public class OfflineVerification {
                                                 "-fx-cursor:hand;");
 
                 verifyOtpBtn.setOnMouseEntered(e -> verifyOtpBtn.setStyle(
-                                "-fx-background-color:#155A87;" +
+                                "-fx-background-color:#0369A1;" +
                                                 "-fx-text-fill:white;" +
                                                 "-fx-font-size:13px;" +
                                                 "-fx-font-weight:800;" +
@@ -1210,7 +1352,7 @@ public class OfflineVerification {
                                                 "-fx-cursor:hand;"));
 
                 verifyOtpBtn.setOnMouseExited(e -> verifyOtpBtn.setStyle(
-                                "-fx-background-color:#1D6FA5;" +
+                                "-fx-background-color:#0284C7;" +
                                                 "-fx-text-fill:white;" +
                                                 "-fx-font-size:13px;" +
                                                 "-fx-font-weight:800;" +
@@ -1221,10 +1363,10 @@ public class OfflineVerification {
                 // RESEND OTP BUTTON
                 // =====================================================
 
-                Button resendBtn = new Button("↻ Resend OTP");
+                Button resendBtn = new Button("↻ Resend Twilio SMS");
                 resendBtn.setStyle(
                                 "-fx-background-color:transparent;" +
-                                                "-fx-text-fill:#3B82C4;" +
+                                                "-fx-text-fill:#0284C7;" +
                                                 "-fx-font-size:12px;" +
                                                 "-fx-font-weight:700;" +
                                                 "-fx-cursor:hand;" +
@@ -1248,25 +1390,22 @@ public class OfflineVerification {
                 final long startTime = System.currentTimeMillis();
 
                 otpCountdownTimer.scheduleAtFixedRate(new TimerTask() {
-
                         @Override
                         public void run() {
-
                                 long elapsed = System.currentTimeMillis() - startTime;
                                 int remaining = 60 - (int) (elapsed / 1000);
 
                                 if (remaining <= 0) {
-                                        javafx.application.Platform.runLater(() -> {
+                                        Platform.runLater(() -> {
                                                 countdownLabel.setText("⏱ OTP Expired");
                                                 countdownLabel.setStyle(
                                                                 "-fx-font-size:12px;" +
                                                                                 "-fx-font-weight:700;" +
                                                                                 "-fx-text-fill:#DC2626;");
-                                                verifyOtpBtn.setDisable(true);
                                         });
                                         cancel();
                                 } else {
-                                        javafx.application.Platform.runLater(() -> {
+                                        Platform.runLater(() -> {
                                                 countdownLabel.setText("⏱ " + remaining + "s remaining");
                                         });
                                 }
@@ -1274,118 +1413,71 @@ public class OfflineVerification {
                 }, 1000, 1000);
 
                 // =====================================================
-                // VERIFY OTP ACTION
+                // VERIFY OTP ACTION (DIRECT TWILIO VALIDATION)
                 // =====================================================
 
-                verifyOtpBtn.setOnAction(e -> {
-
+                Runnable executeVerificationAction = () -> {
                         StringBuilder inputOtp = new StringBuilder();
                         for (TextField f : otpInputFields) {
                                 inputOtp.append(f.getText());
                         }
 
                         if (inputOtp.length() < 6) {
-                                otpError.setText("Please enter all 6 digits.");
+                                otpError.setText("Please enter all 6 digits of the OTP.");
                                 otpError.setVisible(true);
                                 otpError.setManaged(true);
                                 shakeNode(otpInputRow);
                                 return;
                         }
 
-                        boolean valid = controller.verifyOtp(
-                                        electionId, voterId, inputOtp.toString());
+                        boolean valid = controller.verifyTwilioOtp(electionId, voter.getVoterId(), inputOtp.toString());
 
                         if (valid) {
-
                                 cancelOtpTimer();
                                 progressTimeline.stop();
 
-                                showOtpSuccess(
-                                                voterName,
-                                                voterIdDisplay,
-                                                token);
+                                try {
+                                        VoterVerificationService.VerificationResult tokenResult =
+                                                controller.issueTokenAfterVerification(voter, electionId, "Twilio SMS OTP");
 
+                                        if (tokenResult.success()) {
+                                                syncVerificationToFirebase(electionId, voter, tokenResult.token(), "Twilio SMS OTP");
+                                                showOtpSuccess(voter.getFullName(), voter.getVoterId(), tokenResult.token());
+                                        } else {
+                                                showError(tokenResult.message());
+                                        }
+                                } catch (Exception ex) {
+                                        showError("Error issuing voter token: " + ex.getMessage());
+                                }
                         } else {
-
-                                if (controller.isOtpExpired(electionId, voterId)) {
-                                        otpError.setText("OTP has expired. Click Resend OTP.");
+                                if (controller.isOtpExpired(electionId, voter.getVoterId())) {
+                                        otpError.setText("OTP has expired. Click 'Resend Twilio SMS'.");
                                 } else {
-                                        otpError.setText("Incorrect OTP. Please try again.");
+                                        otpError.setText("Incorrect OTP. Please check the SMS on voter's mobile.");
                                 }
 
                                 otpError.setVisible(true);
                                 otpError.setManaged(true);
                                 shakeNode(otpInputRow);
-
-                                // Flash input borders red
-                                for (TextField f : otpInputFields) {
-                                        f.setStyle(
-                                                        "-fx-background-color:#FFFFFF;" +
-                                                                        "-fx-border-color:#DC2626;" +
-                                                                        "-fx-border-width:2;" +
-                                                                        "-fx-border-radius:8;" +
-                                                                        "-fx-background-radius:8;" +
-                                                                        "-fx-font-size:20px;" +
-                                                                        "-fx-font-weight:800;" +
-                                                                        "-fx-text-fill:#1E3A5F;");
-                                }
-
-                                PauseTransition resetBorder = new PauseTransition(
-                                                Duration.seconds(1.5));
-                                resetBorder.setOnFinished(ev -> {
-                                        for (TextField f : otpInputFields) {
-                                                f.setStyle(
-                                                                "-fx-background-color:#FFFFFF;" +
-                                                                                "-fx-border-color:#C8D9EC;" +
-                                                                                "-fx-border-radius:8;" +
-                                                                                "-fx-background-radius:8;" +
-                                                                                "-fx-font-size:20px;" +
-                                                                                "-fx-font-weight:800;" +
-                                                                                "-fx-text-fill:#1E3A5F;");
-                                        }
-                                });
-                                resetBorder.play();
+                                flashInputBorders(otpInputFields);
                         }
-                });
+                };
+
+                verifyOtpBtn.setOnAction(e -> executeVerificationAction.run());
+
+                // Enter key on inputs submits
+                for (TextField f : otpInputFields) {
+                        f.setOnAction(e -> executeVerificationAction.run());
+                }
 
                 // =====================================================
                 // RESEND OTP ACTION
                 // =====================================================
 
                 resendBtn.setOnAction(e -> {
-
                         cancelOtpTimer();
                         progressTimeline.stop();
-
-                        // Clear inputs
-                        for (TextField f : otpInputFields) {
-                                f.clear();
-                        }
-
-                        otpError.setVisible(false);
-                        otpError.setManaged(false);
-
-                        // Generate new OTP
-                        String newOtp = controller.generateOtp(
-                                        electionId, voterId);
-
-                        // Trigger SMS for Resend
-                        new Thread(() -> {
-                            try {
-                                if (voterPhone != null && !voterPhone.isBlank()) {
-                                    com.electrovotesuperx.service.OfflineService.ClerkOtpService.sendSmsOtp(voterPhone, newOtp, voterName);
-                                }
-                            } catch (Throwable ignored) {}
-                        }).start();
-
-                        showOtpCard(
-                                        newOtp,
-                                        electionId,
-                                        voterId,
-                                        voterName,
-                                        voterIdDisplay,
-                                        voterPhone,
-                                        token);
+                        sendTwilioSmsOtp(electionId, voter, formattedPhone);
                 });
 
                 // =====================================================
@@ -1415,10 +1507,63 @@ public class OfflineVerification {
                                 otpButtonRow);
 
                 // Focus first input
-                PauseTransition focusDelay = new PauseTransition(
-                                Duration.millis(500));
+                PauseTransition focusDelay = new PauseTransition(Duration.millis(300));
                 focusDelay.setOnFinished(ev -> otpInputFields[0].requestFocus());
                 focusDelay.play();
+        }
+
+        // =========================================================
+        // FLASH INPUT BORDERS ON ERROR
+        // =========================================================
+
+        private void flashInputBorders(TextField[] fields) {
+                for (TextField f : fields) {
+                        f.setStyle(
+                                        "-fx-background-color:#FFFFFF;" +
+                                                        "-fx-border-color:#DC2626;" +
+                                                        "-fx-border-width:2;" +
+                                                        "-fx-border-radius:8;" +
+                                                        "-fx-background-radius:8;" +
+                                                        "-fx-font-size:20px;" +
+                                                        "-fx-font-weight:800;" +
+                                                        "-fx-text-fill:#1E3A5F;");
+                }
+
+                PauseTransition resetBorder = new PauseTransition(Duration.seconds(1.5));
+                resetBorder.setOnFinished(ev -> {
+                        for (TextField f : fields) {
+                                f.setStyle(
+                                                "-fx-background-color:#FFFFFF;" +
+                                                                "-fx-border-color:#C8D9EC;" +
+                                                                "-fx-border-radius:8;" +
+                                                                "-fx-background-radius:8;" +
+                                                                "-fx-font-size:20px;" +
+                                                                "-fx-font-weight:800;" +
+                                                                "-fx-text-fill:#1E3A5F;");
+                        }
+                });
+                resetBorder.play();
+        }
+
+        // =========================================================
+        // EMERGENCY OFFICER OVERRIDE
+        // =========================================================
+
+        private void executeEmergencyOverride(String electionId, Voter voter) {
+                try {
+                        VoterVerificationService.VerificationResult tokenResult =
+                                controller.issueTokenAfterVerification(voter, electionId, "Officer Emergency Override");
+
+                        if (tokenResult.success()) {
+                                cancelOtpTimer();
+                                syncVerificationToFirebase(electionId, voter, tokenResult.token(), "Officer Emergency Override");
+                                showOtpSuccess(voter.getFullName(), voter.getVoterId(), tokenResult.token());
+                        } else {
+                                showError(tokenResult.message());
+                        }
+                } catch (Exception ex) {
+                        showError("Failed to issue authorization token: " + ex.getMessage());
+                }
         }
 
         // =========================================================
@@ -1905,6 +2050,51 @@ public class OfflineVerification {
                 space.setMaxHeight(height);
 
                 return space;
+        }
+
+        // =========================================================
+        // CLOUD SYNC TO FIREBASE REALTIME DATABASE
+        // =========================================================
+
+        private void syncVerificationToFirebase(String electionId, Voter voter, String token, String authMethod) {
+                new Thread(() -> {
+                        try {
+                                String voterId = voter.getVoterId();
+                                String encodedElection = URLEncoder.encode(electionId, StandardCharsets.UTF_8);
+                                String encodedVoter = URLEncoder.encode(voterId, StandardCharsets.UTF_8);
+                                String path = "/offline_verifications/" + encodedElection + "/" + encodedVoter + ".json";
+                                String authParam = SessionManager.idToken != null && !SessionManager.idToken.isBlank()
+                                        ? "?auth=" + URLEncoder.encode(SessionManager.idToken, StandardCharsets.UTF_8)
+                                        : "";
+                                String url = FirebaseConfig.DATABASE_URL + path + authParam;
+
+                                JsonObject record = new JsonObject();
+                                record.addProperty("voterId", voterId);
+                                record.addProperty("voterName", voter.getFullName());
+                                record.addProperty("phone", voter.getPhone());
+                                record.addProperty("electionId", electionId);
+                                record.addProperty("token", token);
+                                record.addProperty("authMethod", authMethod);
+                                record.addProperty("status", "VERIFIED");
+                                record.addProperty("verifiedAt", System.currentTimeMillis());
+                                record.addProperty("verifiedBy", SessionManager.officerEmail != null ? SessionManager.officerEmail : "Offline Polling Officer");
+
+                                HttpRequest req = HttpRequest.newBuilder()
+                                                .uri(URI.create(url))
+                                                .header("Content-Type", "application/json")
+                                                .PUT(HttpRequest.BodyPublishers.ofString(record.toString(), StandardCharsets.UTF_8))
+                                                .build();
+
+                                HttpResponse<String> resp = HTTP_CLIENT.send(req, HttpResponse.BodyHandlers.ofString());
+                                if (resp.statusCode() >= 200 && resp.statusCode() < 300) {
+                                        System.out.println("[OfflineVerification] ☁️ Synced verified voter [" + voterId + "] to Firebase RTDB.");
+                                } else {
+                                        System.err.println("[OfflineVerification] Firebase sync note: " + resp.statusCode() + " -> " + resp.body());
+                                }
+                        } catch (Exception e) {
+                                System.err.println("[OfflineVerification] Firebase sync error: " + e.getMessage());
+                        }
+                }).start();
         }
 
         // =========================================================

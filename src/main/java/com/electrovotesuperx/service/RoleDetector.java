@@ -48,34 +48,69 @@ public class RoleDetector {
 
         try {
 
-            // ─── Step 1: Read Users/{uid} from Firestore ───
+            // ─── Step 1: Multi-Organization Realtime Database Discovery ───
+            java.util.List<com.electrovotesuperx.model.OnlineVotingModel.UserOrganizationMembership> orgs =
+                    FirebaseDatabaseService.getUserOrganizations(uid, email, idToken);
+
+            if (orgs != null && !orgs.isEmpty()) {
+                // Find highest priority organization: 1) ACCEPTED voter, 2) ADMIN, 3) PENDING voter
+                com.electrovotesuperx.model.OnlineVotingModel.UserOrganizationMembership best = null;
+                for (com.electrovotesuperx.model.OnlineVotingModel.UserOrganizationMembership m : orgs) {
+                    if ("ACCEPTED".equalsIgnoreCase(m.getStatus()) || "VERIFIED".equalsIgnoreCase(m.getStatus())) {
+                        best = m;
+                        break;
+                    }
+                }
+                if (best == null) {
+                    best = orgs.get(0);
+                }
+
+                if ("ADMIN".equalsIgnoreCase(best.getRole())) {
+                    SessionManager.idToken = idToken;
+                    SessionManager.currentRole = "admin";
+                    SessionManager.joinCode = best.getJoinCode();
+                    SessionManager.organizationName = best.getOrganizationName();
+                    SessionManager.adminUid = uid;
+                    SessionManager.adminEmail = email;
+                    SessionManager.adminName = best.getMemberName() != null ? best.getMemberName() : "Administrator";
+                    return RoleResult.ADMIN;
+                } else {
+                    SessionManager.idToken = idToken;
+                    SessionManager.currentRole = "voter";
+                    SessionManager.joinCode = best.getJoinCode();
+                    SessionManager.organizationName = best.getOrganizationName();
+                    SessionManager.voterUid = uid;
+                    SessionManager.voterEmail = email;
+                    String vName = best.getMemberName() != null && !best.getMemberName().isBlank()
+                            ? best.getMemberName()
+                            : (email != null && email.contains("@") ? email.split("@")[0] : "Voter");
+                    SessionManager.voterName = vName;
+                    SessionManager.voterStatus = best.getStatus();
+                    return RoleResult.VOTER;
+                }
+            }
+
+            // ─── Step 2: Read Users/{uid} from Firestore ───
 
             JsonObject userFields =
                     FirestoreDAO.getUser(uid, idToken);
 
-            if (userFields == null) {
-                return RoleResult.UNKNOWN;
-            }
+            if (userFields != null) {
+                String role = FirestoreDAO.getString(userFields, "role");
+                String joinCode = FirestoreDAO.getString(userFields, "organization");
 
-            String role = FirestoreDAO.getString(userFields, "role");
-            String joinCode = FirestoreDAO.getString(userFields, "organization");
-
-            if (role == null || joinCode == null) {
-                return RoleResult.UNKNOWN;
-            }
-
-            // ─── Step 2: Route by role ───
-
-            if ("ADMIN".equalsIgnoreCase(role)) {
-                return populateAdmin(uid, email, joinCode, idToken);
-            }
-
-            if ("POLLING_OFFICER".equalsIgnoreCase(role) || "OFFICER".equalsIgnoreCase(role)) {
-                return populatePollingOfficer(uid, email, joinCode, idToken);
-            }
-
-            if ("VOTER".equalsIgnoreCase(role)) {
-                return populateVoter(uid, email, joinCode, idToken);
+                if (role != null && joinCode != null) {
+                    if ("ADMIN".equalsIgnoreCase(role)) {
+                        RoleResult res = populateAdmin(uid, email, joinCode, idToken);
+                        if (res != RoleResult.UNKNOWN) return res;
+                    } else if ("POLLING_OFFICER".equalsIgnoreCase(role) || "OFFICER".equalsIgnoreCase(role)) {
+                        RoleResult res = populatePollingOfficer(uid, email, joinCode, idToken);
+                        if (res != RoleResult.UNKNOWN) return res;
+                    } else if ("VOTER".equalsIgnoreCase(role)) {
+                        RoleResult res = populateVoter(uid, email, joinCode, idToken);
+                        if (res != RoleResult.UNKNOWN) return res;
+                    }
+                }
             }
 
             return RoleResult.UNKNOWN;
@@ -185,7 +220,7 @@ public class RoleDetector {
             // Verify role and status
             String memberRole = member.has("role")
                     ? member.get("role").getAsString()
-                    : null;
+                    : "VOTER";
 
             if (!"VOTER".equalsIgnoreCase(memberRole)) {
                 return RoleResult.UNKNOWN;
@@ -194,12 +229,6 @@ public class RoleDetector {
             String status = member.has("status")
                     ? member.get("status").getAsString()
                     : "PENDING";
-
-            if (!"ACCEPTED".equalsIgnoreCase(status)
-                    && !"VERIFIED".equalsIgnoreCase(status)) {
-                // Not yet approved — don't auto-route
-                return RoleResult.UNKNOWN;
-            }
 
             String fullName = member.has("name")
                     ? member.get("name").getAsString()
