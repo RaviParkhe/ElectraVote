@@ -190,6 +190,7 @@ public class JoinOrganization {
                                 : (com.electrovotesuperx.config.SessionManager.loggedInEmail != null ? com.electrovotesuperx.config.SessionManager.loggedInEmail : "");
                         String voterPhone = com.electrovotesuperx.config.SessionManager.voterPhone != null ? com.electrovotesuperx.config.SessionManager.voterPhone : "";
 
+                        // Persist voter membership request into Firebase Realtime DB with PENDING status
                         try {
                             com.electrovotesuperx.config.firebaseConfig.FirebaseDatabaseService.saveVoter(
                                     finalCode, voterUid, voterName, voterEmail, idToken);
@@ -203,17 +204,15 @@ public class JoinOrganization {
                         } catch (Exception exFs) {
                             System.err.println("[JoinOrganization] Firestore save note: " + exFs.getMessage());
                         }
-
-                        // Update current active session
-                        com.electrovotesuperx.config.SessionManager.joinCode = finalCode;
-                        com.electrovotesuperx.config.SessionManager.organizationName = finalOrgName;
-                        com.electrovotesuperx.config.SessionManager.voterStatus = "PENDING";
                     }
 
                     javafx.application.Platform.runLater(() -> {
                         submitCodeBtn.setDisable(false);
                         if (finalOrgName != null) {
-                            feedbackLabel.setText("✅ Success! Your request to join '" + finalOrgName + "' (" + finalCode + ") has been submitted successfully.\nAn administrator can now approve your request under Admin > Voters.");
+                            feedbackLabel.setText("✅ Join Request Submitted Successfully!\n" +
+                                    "Your request to join '" + finalOrgName + "' (" + finalCode + ") is now PENDING.\n" +
+                                    "The Administrator of " + finalOrgName + " must review and ACCEPT your request in their Admin Portal (Admin > Voters) before you can vote in this organization.\n" +
+                                    "You can track the approval status anytime under 'My Organization'.");
                             feedbackLabel.setStyle("-fx-text-fill: " + GREEN + "; -fx-font-weight: bold; -fx-font-size: 12.5px;");
                             feedbackLabel.setVisible(true);
                             codeField.clear();

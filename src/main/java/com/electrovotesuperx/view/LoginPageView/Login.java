@@ -526,7 +526,8 @@ public class Login implements Page {
                     RoleDetector.RoleResult detected = RoleDetector.detectRole(
                             result.getLocalId(),
                             result.getEmail(),
-                            result.getIdToken());
+                            result.getIdToken(),
+                            chosenRole);
 
                     javafx.application.Platform.runLater(() -> {
 
@@ -552,20 +553,39 @@ public class Login implements Page {
 
                         } else if ("voter".equals(chosenRole)) {
 
-                            if (detected == RoleDetector.RoleResult.VOTER) {
+                            if (detected == RoleDetector.RoleResult.VOTER || detected == RoleDetector.RoleResult.ADMIN) {
 
-                                // Verified as voter → VoterDashboard
-                                VoterDashboard.loadVoterData(
-                                        SessionManager.voterName,
-                                        "Eligible Voter",
-                                        SessionManager.voterStatus != null
-                                                ? SessionManager.voterStatus
-                                                : "Verified",
-                                        "0",
-                                        SessionManager.organizationName);
+                                String vStatus = SessionManager.voterStatus != null ? SessionManager.voterStatus : "PENDING";
+                                boolean isApproved = "ACCEPTED".equalsIgnoreCase(vStatus) || "VERIFIED".equalsIgnoreCase(vStatus) || detected == RoleDetector.RoleResult.ADMIN;
 
-                                VoterDashboard voterDashboard = new VoterDashboard();
-                                voterDashboard.start(loginStage);
+                                if (isApproved) {
+                                    // Verified & Approved voter → VoterDashboard
+                                    VoterDashboard.loadVoterData(
+                                            SessionManager.voterName != null && !SessionManager.voterName.isBlank()
+                                                    ? SessionManager.voterName
+                                                    : (SessionManager.adminName != null ? SessionManager.adminName : "Eligible Voter"),
+                                            "Eligible Voter",
+                                            vStatus,
+                                            "0",
+                                            SessionManager.organizationName);
+
+                                    VoterDashboard voterDashboard = new VoterDashboard();
+                                    voterDashboard.start(loginStage);
+                                } else if ("REJECTED".equalsIgnoreCase(vStatus)) {
+                                    output.setFill(Color.RED);
+                                    output.setText(
+                                            "Access denied: Your voter registration for '"
+                                                    + (SessionManager.organizationName != null ? SessionManager.organizationName : SessionManager.joinCode)
+                                                    + "' was rejected by the administrator.");
+                                    shakeButton(signInSubmitBtn);
+                                } else {
+                                    output.setFill(Color.web("#d97706"));
+                                    output.setText(
+                                            "⏳ Access denied: Your voter registration for '"
+                                                    + (SessionManager.organizationName != null ? SessionManager.organizationName : SessionManager.joinCode)
+                                                    + "' is awaiting approval by the Organization Administrator.");
+                                    shakeButton(signInSubmitBtn);
+                                }
 
                             } else {
 
@@ -579,43 +599,34 @@ public class Login implements Page {
 
                         } else if ("offline".equals(chosenRole)) {
 
-                            if (detected == RoleDetector.RoleResult.ADMIN) {
+                            OfficerApprovalStatus status = PollingOfficerService.checkOfficerApprovalStatus(
+                                    result.getLocalId(),
+                                    result.getEmail(),
+                                    result.getIdToken());
+
+                            if (status == OfficerApprovalStatus.APPROVED) {
                                 SessionManager.idToken = result.getIdToken();
-                                SessionManager.currentRole = "admin";
+                                SessionManager.currentRole = "polling_officer";
                                 Navigation.init(loginStage);
                                 OfflineHomePage offline = new OfflineHomePage();
                                 loginStage.setScene(offline.getScene());
                                 loginStage.setMaximized(true);
+                            } else if (status == OfficerApprovalStatus.PENDING) {
+                                output.setFill(Color.web("#d97706"));
+                                output.setText(
+                                        "Access denied: Your Polling Officer registration is awaiting approval by "
+                                                + PollingOfficerService.CHIEF_APPROVER_EMAIL + ".");
+                                shakeButton(signInSubmitBtn);
+                            } else if (status == OfficerApprovalStatus.REJECTED) {
+                                output.setFill(Color.RED);
+                                output.setText(
+                                        "Access denied: Your Polling Officer registration was rejected.");
+                                shakeButton(signInSubmitBtn);
                             } else {
-                                OfficerApprovalStatus status = PollingOfficerService.checkOfficerApprovalStatus(
-                                        result.getLocalId(),
-                                        result.getEmail(),
-                                        result.getIdToken());
-
-                                if (status == OfficerApprovalStatus.APPROVED) {
-                                    SessionManager.idToken = result.getIdToken();
-                                    SessionManager.currentRole = "polling_officer";
-                                    Navigation.init(loginStage);
-                                    OfflineHomePage offline = new OfflineHomePage();
-                                    loginStage.setScene(offline.getScene());
-                                    loginStage.setMaximized(true);
-                                } else if (status == OfficerApprovalStatus.PENDING) {
-                                    output.setFill(Color.web("#d97706"));
-                                    output.setText(
-                                            "Access denied: Your Polling Officer registration is awaiting approval by "
-                                                    + PollingOfficerService.CHIEF_APPROVER_EMAIL + ".");
-                                    shakeButton(signInSubmitBtn);
-                                } else if (status == OfficerApprovalStatus.REJECTED) {
-                                    output.setFill(Color.RED);
-                                    output.setText(
-                                            "Access denied: Your Polling Officer registration was rejected.");
-                                    shakeButton(signInSubmitBtn);
-                                } else {
-                                    output.setFill(Color.RED);
-                                    output.setText(
-                                            "Access denied. You are not registered as a verified Polling Officer. Please register first.");
-                                    shakeButton(signInSubmitBtn);
-                                }
+                                output.setFill(Color.RED);
+                                output.setText(
+                                        "Access denied. Offline Voting Portal is restricted exclusively to authorized Polling Officers. Please register first.");
+                                shakeButton(signInSubmitBtn);
                             }
 
                         } else {

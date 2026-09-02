@@ -49,6 +49,143 @@ public class VoterVerificationService {
     }
 
     // =====================================================
+    // VALIDATE VOTER ELIGIBILITY (PRE-VERIFICATION)
+    // =====================================================
+
+    public EligibilityResult validateEligibility(
+            String voterId,
+            String electionId) throws DatabaseException {
+
+        try {
+            if (voterId == null || voterId.isBlank()) {
+                return EligibilityResult.fail("Enter a Voter ID.");
+            }
+
+            if (electionId == null || electionId.isBlank()) {
+                return EligibilityResult.fail("Select an election.");
+            }
+
+            String cleanVoterId = voterId.trim();
+            String cleanElectionId = electionId.trim();
+
+            // Find Election
+            Election election = electionDAO.findById(cleanElectionId);
+            if (election == null) {
+                return EligibilityResult.fail("Election was not found.");
+            }
+
+            if (!"OPEN".equalsIgnoreCase(election.getStatus())) {
+                return EligibilityResult.fail("This election is not open.");
+            }
+
+            // Find Voter
+            Voter voter = voterDAO.findById(cleanVoterId);
+            if (voter == null) {
+                auditLogDAO.log(
+                        "VERIFICATION_FAILED",
+                        cleanVoterId,
+                        cleanElectionId,
+                        null,
+                        "Voter ID was not found in voters table");
+                return EligibilityResult.fail("Voter ID not found.");
+            }
+
+            if (!voter.isActive()) {
+                auditLogDAO.log(
+                        "VERIFICATION_FAILED",
+                        voter.getVoterId(),
+                        cleanElectionId,
+                        null,
+                        "Voter account is suspended");
+                return EligibilityResult.fail("Voter account is suspended.");
+            }
+
+            // Find Election Registration
+            ElectionVoter registration = electionVoterDAO.find(
+                    cleanElectionId,
+                    voter.getVoterId());
+
+            if (registration == null) {
+                auditLogDAO.log(
+                        "VERIFICATION_FAILED",
+                        voter.getVoterId(),
+                        cleanElectionId,
+                        null,
+                        "Voter is not registered for this election");
+                return EligibilityResult.fail("Voter is not registered for this election.");
+            }
+
+            if ("VOTED".equalsIgnoreCase(registration.getStatus())) {
+                auditLogDAO.log(
+                        "VERIFICATION_BLOCKED",
+                        voter.getVoterId(),
+                        cleanElectionId,
+                        null,
+                        "Voter has already voted in this election");
+                return EligibilityResult.alreadyVoted(voter, "This voter has already voted in this election.");
+            }
+
+            return EligibilityResult.eligible(voter, election);
+
+        } catch (SQLException e) {
+            throw new DatabaseException("Database error during eligibility check.", e);
+        }
+    }
+
+    // =====================================================
+    // ISSUE TOKEN AFTER SUCCESSFUL VERIFICATION
+    // =====================================================
+
+    public VerificationResult issueTokenAfterVerification(
+            Voter voter,
+            String electionId,
+            String authMethod) throws DatabaseException {
+
+        try {
+            if (voter == null || electionId == null || electionId.isBlank()) {
+                return VerificationResult.fail("Invalid voter or election.");
+            }
+
+            String cleanElectionId = electionId.trim();
+
+            // Find existing active token
+            Token existing = findActiveTokenForVoter(voter.getVoterId(), cleanElectionId);
+            if (existing != null) {
+                auditLogDAO.log(
+                        "VERIFICATION_EXISTING_TOKEN",
+                        voter.getVoterId(),
+                        cleanElectionId,
+                        existing.getToken(),
+                        "Existing active token returned after " + authMethod + " verification");
+
+                return VerificationResult.success(
+                        voter,
+                        existing.getToken(),
+                        "Voter verified via " + authMethod + ". Existing active token is shown.");
+            }
+
+            // Generate and save new token
+            String token = TokenGenerator.generateToken();
+            tokenDAO.create(token, cleanElectionId, voter.getVoterId());
+
+            auditLogDAO.log(
+                    "VOTER_VERIFIED",
+                    voter.getVoterId(),
+                    cleanElectionId,
+                    token,
+                    "Voter verified via " + authMethod + " and authorization token generated");
+
+            return VerificationResult.success(
+                    voter,
+                    token,
+                    "Voter verified successfully via " + authMethod + ".");
+
+        } catch (SQLException e) {
+            throw new DatabaseException("Database error during token generation.", e);
+        }
+    }
+
+    // =====================================================
     // VERIFY VOTER
     //
     // RULE:
@@ -610,6 +747,30 @@ public class VoterVerificationService {
             return new CompletionResult(
                     false,
                     message);
+        }
+    }
+
+    // =====================================================
+    // ELIGIBILITY RESULT (FOR PRE-OTP CHECK)
+    // =====================================================
+
+    public record EligibilityResult(
+            boolean eligible,
+            boolean alreadyVoted,
+            Voter voter,
+            Election election,
+            String message) {
+
+        public static EligibilityResult eligible(Voter voter, Election election) {
+            return new EligibilityResult(true, false, voter, election, "Voter is eligible to vote.");
+        }
+
+        public static EligibilityResult fail(String message) {
+            return new EligibilityResult(false, false, null, null, message);
+        }
+
+        public static EligibilityResult alreadyVoted(Voter voter, String message) {
+            return new EligibilityResult(false, true, voter, null, message);
         }
     }
 }

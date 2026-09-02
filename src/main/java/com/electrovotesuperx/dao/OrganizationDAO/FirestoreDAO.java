@@ -72,6 +72,18 @@ public class FirestoreDAO {
             String role,
             String joinCode,
             String idToken) throws FirestoreException {
+        String status = "ADMIN".equalsIgnoreCase(role) ? "ACTIVE" : "PENDING";
+        return saveUser(uid, name, email, role, joinCode, status, idToken);
+    }
+
+    public static boolean saveUser(
+            String uid,
+            String name,
+            String email,
+            String role,
+            String joinCode,
+            String status,
+            String idToken) throws FirestoreException {
 
         String url = "https://firestore.googleapis.com/v1/projects/"
                 + PROJECT_ID
@@ -84,6 +96,7 @@ public class FirestoreDAO {
         fields.add("email", stringValue(email));
         fields.add("role", stringValue(role));
         fields.add("organization", stringValue(joinCode));
+        fields.add("status", stringValue(status != null ? status : "PENDING"));
 
         JsonObject body = new JsonObject();
         body.add("fields", fields);
@@ -144,6 +157,89 @@ public class FirestoreDAO {
         return JsonParser.parseString(response.body())
                 .getAsJsonObject()
                 .getAsJsonObject("fields");
+    }
+
+    // =====================================================
+    // GET ALL ORGANIZATIONS (FIRESTORE)
+    // =====================================================
+
+    public static JsonObject getOrganizations(
+            String idToken) throws FirestoreException {
+
+        String url = "https://firestore.googleapis.com/v1/projects/"
+                + PROJECT_ID
+                + "/databases/(default)/documents/Organizations?pageSize=300";
+
+        HttpRequest.Builder builder = HttpRequest.newBuilder()
+                .uri(URI.create(url))
+                .GET();
+
+        if (idToken != null && !idToken.isBlank()) {
+            builder.header("Authorization", "Bearer " + idToken);
+        }
+
+        HttpRequest request = builder.build();
+
+        HttpResponse<String> response;
+        try {
+            response = CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+        } catch (IOException | InterruptedException e) {
+            throw new FirestoreException("Unable to retrieve organizations.", e);
+        }
+
+        if (response.statusCode() != 200) {
+            return null;
+        }
+
+        return JsonParser.parseString(response.body()).getAsJsonObject();
+    }
+
+    // =====================================================
+    // FIND ORGANIZATION BY ADMIN (UID OR EMAIL)
+    // =====================================================
+
+    public static JsonObject findOrganizationByAdmin(
+            String uid,
+            String email,
+            String idToken) {
+
+        try {
+            JsonObject orgsResp = getOrganizations(idToken);
+            if (orgsResp == null && idToken != null) {
+                // Retry without token if auth token had scope issues
+                orgsResp = getOrganizations(null);
+            }
+
+            if (orgsResp != null && orgsResp.has("documents") && orgsResp.get("documents").isJsonArray()) {
+                com.google.gson.JsonArray docs = orgsResp.getAsJsonArray("documents");
+                for (com.google.gson.JsonElement elem : docs) {
+                    if (!elem.isJsonObject()) continue;
+                    JsonObject doc = elem.getAsJsonObject();
+                    if (!doc.has("fields")) continue;
+                    JsonObject fields = doc.getAsJsonObject("fields");
+
+                    String adminUid = getString(fields, "adminUid");
+                    String adminEmail = getString(fields, "adminEmail");
+
+                    if ((uid != null && !uid.isBlank() && uid.equals(adminUid))
+                            || (email != null && !email.isBlank() && email.equalsIgnoreCase(adminEmail))) {
+                        
+                        // Ensure joinCode is present in fields
+                        if (!fields.has("joinCode") || getString(fields, "joinCode") == null) {
+                            String docName = doc.has("name") ? doc.get("name").getAsString() : "";
+                            if (docName.contains("/")) {
+                                String extractedCode = docName.substring(docName.lastIndexOf('/') + 1);
+                                fields.add("joinCode", stringValue(extractedCode));
+                            }
+                        }
+                        return fields;
+                    }
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("[FirestoreDAO] findOrganizationByAdmin note: " + e.getMessage());
+        }
+        return null;
     }
 
     // =====================================================
@@ -283,7 +379,30 @@ public class FirestoreDAO {
         try {
             HttpResponse<String> response = CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
             System.out.println("[FirestoreDAO] UpdateOfficerStatus response: " + response.statusCode());
-            return response.statusCode() == 200;
+
+            // Also mirror status and role to Users/{uid}
+            try {
+                String usersUrl = "https://firestore.googleapis.com/v1/projects/"
+                        + PROJECT_ID
+                        + "/databases/(default)/documents/Users/"
+                        + uid
+                        + "?updateMask.fieldPaths=status&updateMask.fieldPaths=role";
+                JsonObject uFields = new JsonObject();
+                uFields.add("status", stringValue(status));
+                uFields.add("role", stringValue("POLLING_OFFICER"));
+                JsonObject uBody = new JsonObject();
+                uBody.add("fields", uFields);
+
+                HttpRequest userReq = HttpRequest.newBuilder()
+                        .uri(URI.create(usersUrl))
+                        .header("Authorization", "Bearer " + idToken)
+                        .header("Content-Type", "application/json")
+                        .method("PATCH", HttpRequest.BodyPublishers.ofString(uBody.toString(), StandardCharsets.UTF_8))
+                        .build();
+                CLIENT.send(userReq, HttpResponse.BodyHandlers.ofString());
+            } catch (Exception ignored) {}
+
+            return response.statusCode() == 200 || response.statusCode() == 201;
         } catch (Exception e) {
             throw new FirestoreException("Unable to update officer status.", e);
         }

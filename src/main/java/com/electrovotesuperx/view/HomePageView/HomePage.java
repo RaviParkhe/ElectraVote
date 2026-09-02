@@ -152,7 +152,7 @@ public class HomePage implements Page {
 
         Button offlineButton = createCardButton("Get Started  →", "#059669");
         offlineButton.setOnAction(e -> {
-            if (SessionManager.isAdmin() || SessionManager.isPollingOfficer()) {
+            if (SessionManager.isPollingOfficer()) {
                 Navigation.init(stage);
                 OfflineHomePage offline = new OfflineHomePage();
                 stage.setScene(offline.getScene());
@@ -376,6 +376,34 @@ public class HomePage implements Page {
 
         registerForm.getChildren().addAll(regNameBox, regEmailBox, regPassBox, regMetaBox, registerSubmitBtn, regStatusLabel);
 
+        // Auto-fill default email and name from current user session
+        String defaultEmail = SessionManager.loggedInEmail != null && !SessionManager.loggedInEmail.isBlank()
+                ? SessionManager.loggedInEmail
+                : (SessionManager.officerEmail != null && !SessionManager.officerEmail.isBlank()
+                        ? SessionManager.officerEmail
+                        : (SessionManager.voterEmail != null && !SessionManager.voterEmail.isBlank()
+                                ? SessionManager.voterEmail
+                                : (SessionManager.adminEmail != null && !SessionManager.adminEmail.isBlank()
+                                        ? SessionManager.adminEmail
+                                        : "")));
+
+        if (!defaultEmail.isBlank()) {
+            siEmailField.setText(defaultEmail);
+            regEmailField.setText(defaultEmail);
+        }
+
+        String defaultName = SessionManager.voterName != null && !SessionManager.voterName.isBlank()
+                ? SessionManager.voterName
+                : (SessionManager.adminName != null && !SessionManager.adminName.isBlank()
+                        ? SessionManager.adminName
+                        : (SessionManager.officerName != null && !SessionManager.officerName.isBlank()
+                                ? SessionManager.officerName
+                                : ""));
+
+        if (!defaultName.isBlank() && !defaultName.equalsIgnoreCase("Eligible Voter") && !defaultName.equalsIgnoreCase("Voter") && !defaultName.equalsIgnoreCase("Administrator")) {
+            regNameField.setText(defaultName);
+        }
+
         // Tab Switching Actions
         signInTabBtn.setOnAction(e -> {
             signInTabBtn.setStyle(activeTabStyle);
@@ -434,23 +462,6 @@ public class HomePage implements Page {
                             spinner.setVisible(false);
                             siStatusLabel.setText(result.getMessage());
                             siStatusLabel.setStyle("-fx-text-fill: #dc2626; -fx-font-size: 11.5px; -fx-font-weight: 700;");
-                        });
-                        return;
-                    }
-
-                    // Check if Admin
-                    RoleDetector.RoleResult detectedRole = RoleDetector.detectRole(result.getLocalId(), result.getEmail(), result.getIdToken());
-                    if (detectedRole == RoleDetector.RoleResult.ADMIN) {
-                        Platform.runLater(() -> {
-                            unlockBtn.setDisable(false);
-                            spinner.setVisible(false);
-                            SessionManager.idToken = result.getIdToken();
-                            SessionManager.currentRole = "admin";
-                            dialog.close();
-                            Navigation.init(ownerStage);
-                            OfflineHomePage offline = new OfflineHomePage();
-                            ownerStage.setScene(offline.getScene());
-                            ownerStage.setMaximized(true);
                         });
                         return;
                     }

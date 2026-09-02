@@ -196,6 +196,11 @@ return response.statusCode() >= 200 &&
         );
 
         member.addProperty(
+                "status",
+                "ACCEPTED"
+        );
+
+        member.addProperty(
                 "joinedAt",
                 System.currentTimeMillis()
         );
@@ -560,8 +565,35 @@ return response.statusCode() >= 200 &&
                         HttpResponse.BodyHandlers.ofString()
                 );
 
-        return response.statusCode() >= 200
-                && response.statusCode() < 300;
+        if (response.statusCode() >= 200 && response.statusCode() < 300) {
+            // Also mirror status to Firestore Users/{uid}
+            try {
+                if (idToken != null && !idToken.isBlank()) {
+                    String usersUrl = "https://firestore.googleapis.com/v1/projects/"
+                            + FirebaseConfig.PROJECT_ID
+                            + "/databases/(default)/documents/Users/"
+                            + uid
+                            + "?updateMask.fieldPaths=status";
+                    JsonObject uFields = new JsonObject();
+                    JsonObject strVal = new JsonObject();
+                    strVal.addProperty("stringValue", status);
+                    uFields.add("status", strVal);
+                    JsonObject uBody = new JsonObject();
+                    uBody.add("fields", uFields);
+
+                    HttpRequest userReq = HttpRequest.newBuilder()
+                            .uri(URI.create(usersUrl))
+                            .header("Authorization", "Bearer " + idToken)
+                            .header("Content-Type", "application/json")
+                            .method("PATCH", HttpRequest.BodyPublishers.ofString(uBody.toString(), StandardCharsets.UTF_8))
+                            .build();
+                    CLIENT.send(userReq, HttpResponse.BodyHandlers.ofString());
+                }
+            } catch (Exception ignored) {}
+            return true;
+        }
+
+        return false;
     }
 
     // =========================================================
@@ -721,6 +753,143 @@ return response.statusCode() >= 200 &&
             e.printStackTrace();
             return false;
         }
+    }
+
+    // =========================================================
+    // GET ALL ORGANIZATIONS (REALTIME DATABASE)
+    // =========================================================
+
+    public static JsonObject getAllOrganizations(String idToken) {
+        try {
+            String path = "/organizations.json";
+            String url = FirebaseConfig.DATABASE_URL + path + (idToken != null && !idToken.isBlank() ? "?auth=" + encode(idToken) : "");
+
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(url))
+                    .GET()
+                    .build();
+
+            HttpResponse<String> response = CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() >= 200 && response.statusCode() < 300 && response.body() != null && !response.body().equals("null")) {
+                return JsonParser.parseString(response.body()).getAsJsonObject();
+            }
+        } catch (Exception e) {
+            System.err.println("[FirebaseDatabaseService] getAllOrganizations note: " + e.getMessage());
+        }
+        return null;
+    }
+
+    // =========================================================
+    // GET ALL ORGANIZATIONS FOR A GIVEN USER (BY UID OR EMAIL)
+    // =========================================================
+
+    public static java.util.List<com.electrovotesuperx.model.OnlineVotingModel.UserOrganizationMembership> getUserOrganizations(
+            String uid,
+            String email,
+            String idToken) {
+
+        java.util.List<com.electrovotesuperx.model.OnlineVotingModel.UserOrganizationMembership> memberships = new java.util.ArrayList<>();
+        java.util.Set<String> processedCodes = new java.util.HashSet<>();
+
+        try {
+            JsonObject allOrgs = getAllOrganizations(idToken);
+            if (allOrgs == null && idToken != null) {
+                // Try without token as fallback
+                allOrgs = getAllOrganizations(null);
+            }
+
+            if (allOrgs != null) {
+                for (java.util.Map.Entry<String, com.google.gson.JsonElement> entry : allOrgs.entrySet()) {
+                    String joinCode = entry.getKey();
+                    if (entry.getValue() == null || !entry.getValue().isJsonObject()) continue;
+                    JsonObject org = entry.getValue().getAsJsonObject();
+
+                    String orgName = org.has("organizationName") ? org.get("organizationName").getAsString() : joinCode;
+                    String adminUid = org.has("adminUid") ? org.get("adminUid").getAsString() : "";
+                    String adminEmail = org.has("adminEmail") ? org.get("adminEmail").getAsString() : "";
+
+                    boolean isMember = false;
+                    String role = "VOTER";
+                    String status = "ACCEPTED";
+                    String memberName = org.has("adminName") ? org.get("adminName").getAsString() : "Voter";
+
+                    // 1. Check admin
+                    if ((uid != null && !uid.isBlank() && uid.equals(adminUid)) ||
+                        (email != null && !email.isBlank() && email.equalsIgnoreCase(adminEmail))) {
+                        isMember = true;
+                        role = "ADMIN";
+                        status = "ACCEPTED";
+                        memberName = org.has("adminName") ? org.get("adminName").getAsString() : "Administrator";
+                    }
+
+                    // 2. Check members list
+                    if (org.has("members") && org.get("members").isJsonObject()) {
+                        JsonObject members = org.getAsJsonObject("members");
+                        
+                        // Check direct UID
+                        if (uid != null && members.has(uid) && members.get(uid).isJsonObject()) {
+                            JsonObject m = members.getAsJsonObject(uid);
+                            isMember = true;
+                            String mRole = m.has("role") ? m.get("role").getAsString() : "VOTER";
+                            if (!"ADMIN".equalsIgnoreCase(role)) {
+                                role = mRole;
+                                status = m.has("status") ? m.get("status").getAsString() : "PENDING";
+                            }
+                            if (m.has("name")) memberName = m.get("name").getAsString();
+                            else if (m.has("fullName")) memberName = m.get("fullName").getAsString();
+                        } else {
+                            // Check matching email
+                            for (java.util.Map.Entry<String, com.google.gson.JsonElement> memEntry : members.entrySet()) {
+                                if (memEntry.getValue().isJsonObject()) {
+                                    JsonObject m = memEntry.getValue().getAsJsonObject();
+                                    String mEmail = m.has("email") ? m.get("email").getAsString() : "";
+                                    String mUid = m.has("uid") ? m.get("uid").getAsString() : memEntry.getKey();
+
+                                    if ((email != null && !email.isBlank() && email.equalsIgnoreCase(mEmail)) ||
+                                        (uid != null && !uid.isBlank() && uid.equals(mUid))) {
+                                        isMember = true;
+                                        String mRole = m.has("role") ? m.get("role").getAsString() : "VOTER";
+                                        if (!"ADMIN".equalsIgnoreCase(role)) {
+                                            role = mRole;
+                                            status = m.has("status") ? m.get("status").getAsString() : "PENDING";
+                                        }
+                                        if (m.has("name")) memberName = m.get("name").getAsString();
+                                        else if (m.has("fullName")) memberName = m.get("fullName").getAsString();
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if (isMember && !processedCodes.contains(joinCode)) {
+                        processedCodes.add(joinCode);
+                        boolean isActive = joinCode.equalsIgnoreCase(com.electrovotesuperx.config.SessionManager.joinCode);
+                        memberships.add(new com.electrovotesuperx.model.OnlineVotingModel.UserOrganizationMembership(
+                                joinCode, orgName, role, status, memberName, email, 0, isActive
+                        ));
+                    }
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("[FirebaseDatabaseService] getUserOrganizations note: " + e.getMessage());
+        }
+
+        // Always ensure current session's active organization is in the list
+        String activeJoinCode = com.electrovotesuperx.config.SessionManager.joinCode;
+        if (activeJoinCode != null && !activeJoinCode.isBlank() && !processedCodes.contains(activeJoinCode)) {
+            String activeOrgName = com.electrovotesuperx.config.SessionManager.organizationName != null && !com.electrovotesuperx.config.SessionManager.organizationName.isBlank()
+                    ? com.electrovotesuperx.config.SessionManager.organizationName : activeJoinCode;
+            String activeStatus = com.electrovotesuperx.config.SessionManager.voterStatus != null ? com.electrovotesuperx.config.SessionManager.voterStatus : "ACCEPTED";
+            String activeName = com.electrovotesuperx.config.SessionManager.voterName != null ? com.electrovotesuperx.config.SessionManager.voterName : "Voter";
+            String activeRole = com.electrovotesuperx.config.SessionManager.currentRole != null ? com.electrovotesuperx.config.SessionManager.currentRole.toUpperCase() : "VOTER";
+
+            memberships.add(0, new com.electrovotesuperx.model.OnlineVotingModel.UserOrganizationMembership(
+                    activeJoinCode, activeOrgName, activeRole, activeStatus, activeName, email, 0, true
+            ));
+        }
+
+        return memberships;
     }
 
     // =========================================================
