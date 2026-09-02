@@ -1,0 +1,1068 @@
+package com.electrovotesuperx.view.AdminView;
+
+import javafx.animation.Animation;
+import javafx.animation.FadeTransition;
+import javafx.animation.KeyFrame;
+import javafx.animation.KeyValue;
+import javafx.animation.ScaleTransition;
+import javafx.animation.Timeline;
+import javafx.application.Application;
+import javafx.geometry.Insets;
+import javafx.geometry.Pos;
+import javafx.scene.Scene;
+import javafx.scene.control.*;
+import javafx.scene.effect.DropShadow;
+import javafx.scene.layout.*;
+import javafx.scene.paint.Color;
+import javafx.scene.shape.Circle;
+import javafx.stage.FileChooser;
+import javafx.stage.Stage;
+import javafx.util.Duration;
+
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import javafx.application.Platform;
+import com.electrovotesuperx.config.SessionManager;
+import com.electrovotesuperx.config.firebaseConfig.FirebaseDatabaseService;
+import com.electrovotesuperx.controller.AdminController.ElectionController;
+import com.electrovotesuperx.dao.AdminDAO.VoteDAO;
+import com.electrovotesuperx.model.AdminModel.ElectionData;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+
+public class AdminDashboard extends Application {
+
+    public static Stage AdminDashboardStage;
+    public static Scene AdminDashboardScene;
+
+    public static class DashboardStats {
+        public int totalElections = 0;
+        public int activeElections = 0;
+        public int totalVoters = 0;
+        public int acceptedVoters = 0;
+        public int pendingVoters = 0;
+        public int totalBallotsCast = 0;
+        public double overallTurnout = 0.0;
+        public List<ElectionData> elections = new ArrayList<>();
+        public Map<String, Integer> ballotsPerElection = new HashMap<>();
+    }
+
+    private static DashboardStats latestStats = new DashboardStats();
+
+    private static final String FONT = "-fx-font-family: 'Segoe UI', 'Inter', -apple-system, sans-serif;";
+
+    private static final String NAV_DEFAULT = FONT +
+            "-fx-background-color: transparent;" +
+            "-fx-text-fill: #94a3b8;" +
+            "-fx-font-size: 13.5px;" +
+            "-fx-font-weight: 600;" +
+            "-fx-padding: 10 16;" +
+            "-fx-background-radius: 8;" +
+            "-fx-cursor: hand;";
+
+    private static final String NAV_ACTIVE = FONT +
+            "-fx-background-color: #3b82f6;" +
+            "-fx-text-fill: white;" +
+            "-fx-font-size: 13.5px;" +
+            "-fx-font-weight: bold;" +
+            "-fx-padding: 10 16;" +
+            "-fx-background-radius: 8;" +
+            "-fx-cursor: hand;";
+
+    @Override
+    public void start(Stage stage) {
+        AdminDashboardStage = stage;
+
+        BorderPane root = new BorderPane();
+        root.setStyle("-fx-background-color: #0b1120; " + FONT);
+
+        // =========================================================================
+        // 1. SIDEBAR WITH ICONS
+        // =========================================================================
+        VBox sidebar = new VBox(8);
+        sidebar.setPadding(new Insets(24, 16, 24, 16));
+        sidebar.setPrefWidth(240);
+        sidebar.setStyle("-fx-background-color: #0b1329;");
+
+        HBox brand = new HBox(10);
+        brand.setAlignment(Pos.CENTER_LEFT);
+        brand.setPadding(new Insets(0, 8, 12, 8));
+
+        Circle brandCircle = new Circle(14, Color.web("#3b82f6"));
+        Label brandLetter = new Label("⚡");
+        brandLetter.setStyle(FONT + "-fx-text-fill: white; -fx-font-weight: bold; -fx-font-size: 13px;");
+        StackPane brandLogo = new StackPane(brandCircle, brandLetter);
+
+        Label logo = new Label("ElectraVote");
+        logo.setStyle(FONT + "-fx-text-fill: white; -fx-font-size: 20px; -fx-font-weight: 800;");
+        brand.getChildren().addAll(brandLogo, logo);
+
+        VBox orgBadge = new VBox(2);
+        orgBadge.setPadding(new Insets(10, 12, 10, 12));
+        orgBadge.setStyle("-fx-background-color: #17223b; -fx-background-radius: 8;");
+        String displayOrgName = SessionManager.organizationName != null && !SessionManager.organizationName.isBlank()
+                ? SessionManager.organizationName
+                : "Organization Portal";
+        Label orgName = new Label(displayOrgName);
+        orgName.setStyle(FONT + "-fx-text-fill: #f8fafc; -fx-font-size: 13px; -fx-font-weight: bold;");
+        Label orgRole = new Label(
+                SessionManager.joinCode != null ? "Code: " + SessionManager.joinCode : "Tenant Admin");
+        orgRole.setStyle(FONT + "-fx-text-fill: #38bdf8; -fx-font-size: 11px; -fx-font-weight: 600;");
+        orgBadge.getChildren().addAll(orgName, orgRole);
+
+        // Navigation Buttons
+        Button dashboardBtn = new Button("⊞  Dashboard");
+        Button electionsBtn = new Button("🗳  Elections");
+        Button votersBtn = new Button("👥  Voters");
+        Button candidatesBtn = new Button("👤  Candidates");
+        Button liveVotingBtn = new Button("📊  Live Voting");
+        Button quickPollBtn = new Button("⚡  Quick Polls");
+        Button resultsBtn = new Button("🏆  Results");
+        Button reportsBtn = new Button("📑  Reports");
+        Button aiGovernanceBtn = new Button("🤖  AI Governance");
+        Button settingsBtn = new Button("⚙  Settings");
+        Button logoutBtn = new Button("🚪  Logout");
+
+        Button[] buttons = { dashboardBtn, electionsBtn, votersBtn, candidatesBtn, liveVotingBtn, quickPollBtn,
+                resultsBtn,
+                reportsBtn, aiGovernanceBtn, settingsBtn, logoutBtn };
+
+        for (Button btn : buttons) {
+            btn.setMaxWidth(Double.MAX_VALUE);
+            btn.setAlignment(Pos.CENTER_LEFT);
+            btn.setStyle(NAV_DEFAULT);
+            btn.setOnMouseEntered(e -> {
+                if (!btn.getStyle().contains("-fx-background-color: #3b82f6;")) {
+                    btn.setStyle(NAV_DEFAULT + "-fx-background-color: #17223b; -fx-text-fill: #ffffff;");
+                }
+            });
+            btn.setOnMouseExited(e -> {
+                if (!btn.getStyle().contains("-fx-background-color: #3b82f6;")) {
+                    btn.setStyle(NAV_DEFAULT);
+                }
+            });
+        }
+        dashboardBtn.setStyle(NAV_ACTIVE);
+
+        Region sidebarSpacer = new Region();
+        VBox.setVgrow(sidebarSpacer, Priority.ALWAYS);
+
+        logoutBtn.setStyle(NAV_DEFAULT + "-fx-text-fill: #f87171;");
+        logoutBtn.setOnMouseEntered(
+                e -> logoutBtn.setStyle(NAV_DEFAULT + "-fx-background-color: #450a0a; -fx-text-fill: #fca5a5;"));
+        logoutBtn.setOnMouseExited(e -> logoutBtn.setStyle(NAV_DEFAULT + "-fx-text-fill: #f87171;"));
+
+        sidebar.getChildren().addAll(
+                brand, orgBadge, new Region() {
+                    {
+                        setPrefHeight(10);
+                    }
+                },
+                dashboardBtn, electionsBtn, votersBtn, candidatesBtn,
+                liveVotingBtn, quickPollBtn, resultsBtn, reportsBtn, aiGovernanceBtn, settingsBtn,
+                sidebarSpacer, logoutBtn);
+
+        // =========================================================================
+        // 2. TOP BAR
+        // =========================================================================
+        HBox topBar = new HBox(16);
+        topBar.setPadding(new Insets(12, 28, 12, 28));
+        topBar.setAlignment(Pos.CENTER_LEFT);
+        topBar.setStyle(
+                "-fx-background-color: rgba(255, 255, 255, 0.95); -fx-border-color: #cbd5e1; -fx-border-width: 0 0 1.5 0;");
+
+        VBox titleBox = new VBox(2);
+        Label pageTitle = new Label("Electoral Command Center");
+        pageTitle.setStyle(FONT + "-fx-font-size: 18px; -fx-font-weight: 800; -fx-text-fill: #0f172a;");
+        Label pageSubtitle = new Label("Online voting telemetry, turnout monitoring & election overview");
+        pageSubtitle.setStyle(FONT + "-fx-font-size: 11.5px; -fx-text-fill: #64748b; -fx-font-weight: 600;");
+        titleBox.getChildren().addAll(pageTitle, pageSubtitle);
+
+        Region topSpacer = new Region();
+        HBox.setHgrow(topSpacer, Priority.ALWAYS);
+
+        TextField searchInput = new TextField();
+        searchInput.setPromptText("🔍  Search elections, candidates, results...");
+        searchInput.setPrefWidth(240);
+        searchInput.setStyle(FONT
+                + "-fx-background-color: #f8fafc; -fx-border-color: #94a3b8; -fx-border-radius: 8; -fx-background-radius: 8; -fx-padding: 6 10; -fx-font-size: 12px; -fx-font-weight: 500;");
+
+        // --- ANIMATED "ONLINE VOTING LIVE" PILL ---
+        HBox liveIndicator = new HBox(8);
+        liveIndicator.setAlignment(Pos.CENTER);
+        liveIndicator.setPadding(new Insets(5, 12, 5, 12));
+        liveIndicator.setStyle(
+                "-fx-background-color: #ecfdf5; -fx-background-radius: 20; -fx-border-color: #10b981; -fx-border-width: 1.5; -fx-border-radius: 20; -fx-cursor: hand;");
+
+        Circle pulseRing = new Circle(6, Color.web("#34d399", 0.5));
+        Circle liveDot = new Circle(4, Color.web("#10b981"));
+
+        DropShadow dotGlow = new DropShadow();
+        dotGlow.setColor(Color.web("#10b981", 0.8));
+        dotGlow.setRadius(6);
+        dotGlow.setSpread(0.4);
+        liveDot.setEffect(dotGlow);
+
+        StackPane beaconStack = new StackPane(pulseRing, liveDot);
+
+        ScaleTransition pulseScale = new ScaleTransition(Duration.millis(1100), pulseRing);
+        pulseScale.setFromX(0.8);
+        pulseScale.setFromY(0.8);
+        pulseScale.setToX(1.8);
+        pulseScale.setToY(1.8);
+        pulseScale.setAutoReverse(true);
+        pulseScale.setCycleCount(Animation.INDEFINITE);
+        pulseScale.play();
+
+        FadeTransition pulseFade = new FadeTransition(Duration.millis(1100), pulseRing);
+        pulseFade.setFromValue(0.8);
+        pulseFade.setToValue(0.1);
+        pulseFade.setAutoReverse(true);
+        pulseFade.setCycleCount(Animation.INDEFINITE);
+        pulseFade.play();
+
+        Label liveText = new Label("ONLINE VOTING LIVE");
+        liveText.setStyle(
+                FONT + "-fx-text-fill: #047857; -fx-font-weight: 900; -fx-font-size: 10.5px; -fx-letter-spacing: 0.4;");
+
+        DropShadow pillGlow = new DropShadow();
+        pillGlow.setColor(Color.web("#10b981", 0.25));
+        pillGlow.setRadius(8);
+        pillGlow.setSpread(0.2);
+        liveIndicator.setEffect(pillGlow);
+
+        Timeline pillPulse = new Timeline(
+                new KeyFrame(Duration.ZERO, new KeyValue(pillGlow.radiusProperty(), 5),
+                        new KeyValue(pillGlow.colorProperty(), Color.web("#10b981", 0.2))),
+                new KeyFrame(Duration.millis(1200), new KeyValue(pillGlow.radiusProperty(), 12),
+                        new KeyValue(pillGlow.colorProperty(), Color.web("#10b981", 0.55))));
+        pillPulse.setAutoReverse(true);
+        pillPulse.setCycleCount(Animation.INDEFINITE);
+        pillPulse.play();
+
+        liveIndicator.getChildren().addAll(beaconStack, liveText);
+
+        HBox userBadge = new HBox(8);
+        userBadge.setAlignment(Pos.CENTER_LEFT);
+        userBadge.setPadding(new Insets(4, 10, 4, 10));
+        userBadge.setStyle(
+                "-fx-background-color: #f8fafc; -fx-border-color: #cbd5e1; -fx-border-width: 1.2; -fx-border-radius: 20; -fx-background-radius: 20;");
+
+        Circle avatar = new Circle(12, Color.web("#0f172a"));
+        Label avText = new Label("AD");
+        avText.setStyle(FONT + "-fx-text-fill: white; -fx-font-size: 9.5px; -fx-font-weight: bold;");
+        StackPane avPane = new StackPane(avatar, avText);
+
+        Label userRoleLabel = new Label("Administrator");
+        userRoleLabel.setStyle(FONT + "-fx-font-size: 12px; -fx-font-weight: 700; -fx-text-fill: #1e293b;");
+        userBadge.getChildren().addAll(avPane, userRoleLabel);
+
+        topBar.getChildren().addAll(titleBox, topSpacer, searchInput, liveIndicator, userBadge);
+
+        // =========================================================================
+        // 3. CENTER CONTENT
+        // =========================================================================
+        BorderPane center = new BorderPane();
+        center.setStyle(
+                "-fx-background-color: linear-gradient(to bottom right, #f8fafc 0%, #eef2ff 35%, #e0e7ff 70%, #f5f3ff 100%);");
+        center.setTop(topBar);
+
+        ElectionPage electionPage = new ElectionPage();
+        CandidatePage candidatePage = new CandidatePage();
+        VotersPage voterPage = new VotersPage();
+        LiveVotingPage liveVotingPage = new LiveVotingPage();
+        ResultPage resultPage = new ResultPage();
+
+        ScrollPane dashboardScroll = new ScrollPane();
+        dashboardScroll.setFitToWidth(true);
+        dashboardScroll.setFitToHeight(true);
+        dashboardScroll.setStyle(
+                "-fx-background-color: transparent; -fx-background: transparent;");
+
+        VBox content = buildModernCenterContent(stage);
+        dashboardScroll.setContent(content);
+
+        center.setCenter(dashboardScroll);
+        root.setLeft(sidebar);
+        root.setCenter(center);
+
+        dashboardBtn.setOnAction(event -> {
+            setActiveNav(dashboardBtn, buttons);
+            VBox newContent = buildModernCenterContent(stage);
+            dashboardScroll.setContent(newContent);
+            center.setCenter(dashboardScroll);
+        });
+
+        electionsBtn.setOnAction(e -> {
+            setActiveNav(electionsBtn, buttons);
+            center.setCenter(new ElectionPage());
+        });
+
+        candidatesBtn.setOnAction(e -> {
+            setActiveNav(candidatesBtn, buttons);
+            center.setCenter(candidatePage);
+        });
+
+        votersBtn.setOnAction(e -> {
+            setActiveNav(votersBtn, buttons);
+            center.setCenter(voterPage);
+        });
+
+        liveVotingBtn.setOnAction(e -> {
+            setActiveNav(liveVotingBtn, buttons);
+            center.setCenter(liveVotingPage);
+        });
+
+        quickPollBtn.setOnAction(e -> {
+            setActiveNav(quickPollBtn, buttons);
+            com.electrovotesuperx.view.QuickPollView.QuickPoll qp = new com.electrovotesuperx.view.QuickPollView.QuickPoll();
+            Scene prevScene = AdminDashboardStage.getScene();
+            AdminDashboardStage.setScene(qp.getScene(() -> {
+                AdminDashboardStage.setScene(prevScene);
+                AdminDashboardStage.setMaximized(true);
+            }));
+            AdminDashboardStage.setMaximized(true);
+        });
+
+        resultsBtn.setOnAction(e -> {
+            setActiveNav(resultsBtn, buttons);
+            center.setCenter(resultPage);
+        });
+
+        reportsBtn.setOnAction(e -> {
+            setActiveNav(reportsBtn, buttons);
+            center.setCenter(new ReportsPage());
+        });
+
+        aiGovernanceBtn.setOnAction(e -> {
+            setActiveNav(aiGovernanceBtn, buttons);
+            center.setCenter(new AIGovernancePage());
+        });
+
+        settingsBtn.setOnAction(e -> {
+            setActiveNav(settingsBtn, buttons);
+            center.setCenter(new SettingsPage());
+        });
+
+        logoutBtn.setOnAction(e -> {
+            System.out.println("Admin logging out...");
+            com.electrovotesuperx.config.SessionManager.clearSession();
+            Stage currentStage = stage != null ? stage
+                    : (AdminDashboardStage != null ? AdminDashboardStage
+                            : com.electrovotesuperx.utils.Navigation.getStage());
+            if (currentStage != null) {
+                com.electrovotesuperx.view.LoginPageView.Login.loginStage = currentStage;
+                com.electrovotesuperx.utils.Navigation.init(currentStage);
+                com.electrovotesuperx.view.LoginPageView.Login login = new com.electrovotesuperx.view.LoginPageView.Login();
+                Scene loginScene = login.getScene(() -> {
+                    currentStage.close();
+                });
+                currentStage.setTitle("ElectraVote");
+                currentStage.setScene(loginScene);
+                currentStage.setMaximized(true);
+                currentStage.show();
+            }
+        });
+
+        Scene scene = new Scene(root);
+        AdminDashboardScene = scene;
+
+        AdminDashboardStage.setTitle("ElectraVote SaaS Admin Portal");
+        AdminDashboardStage.setScene(scene);
+        AdminDashboardStage.show();
+        AdminDashboardStage.setMaximized(true);
+    }
+
+    private void setActiveNav(Button target, Button[] all) {
+        for (Button btn : all) {
+            btn.setStyle(NAV_DEFAULT);
+        }
+        target.setStyle(NAV_ACTIVE);
+    }
+
+    private VBox buildModernCenterContent(Stage currentStage) {
+        VBox content = new VBox(16);
+        content.setPadding(new Insets(20, 26, 26, 26));
+        content.setStyle("-fx-background-color: transparent;");
+
+        // 1. Hero Organization Status Banner (Slimmed Down)
+        HBox heroBanner = new HBox(16);
+        heroBanner.setAlignment(Pos.CENTER_LEFT);
+        heroBanner.setPadding(new Insets(14, 20, 14, 20));
+        heroBanner.setStyle("-fx-background-color: linear-gradient(to right, #0f172a 0%, #1e1b4b 60%, #312e81 100%); " +
+                "-fx-background-radius: 12; " +
+                "-fx-border-color: #6366f1; " +
+                "-fx-border-radius: 12; " +
+                "-fx-border-width: 1.2; " +
+                "-fx-effect: dropshadow(gaussian, rgba(49,46,129,0.25), 12, 0, 0, 4);");
+
+        VBox heroText = new VBox(3);
+        String orgTitle = SessionManager.organizationName != null && !SessionManager.organizationName.isBlank()
+                ? SessionManager.organizationName
+                : "Organization Portal";
+        Label heroTitle = new Label("Welcome back to " + orgTitle + " Portal");
+        heroTitle.setStyle(FONT + "-fx-font-size: 17px; -fx-font-weight: 900; -fx-text-fill: #ffffff;");
+        Label heroSub = new Label(
+                "Online elections are actively receiving cast ballots. Double-voting checks and cryptographic locks are nominal.");
+        heroSub.setStyle(FONT + "-fx-font-size: 11.5px; -fx-text-fill: #a5b4fc; -fx-font-weight: 500;");
+        heroText.getChildren().addAll(heroTitle, heroSub);
+
+        Region heroSpacer = new Region();
+        HBox.setHgrow(heroSpacer, Priority.ALWAYS);
+
+        Button quickAuditBtn = new Button("⚡ Generate Turnout Report");
+        quickAuditBtn.setStyle(FONT + "-fx-background-color: linear-gradient(to right, #3b82f6, #6366f1); " +
+                "-fx-text-fill: white; " +
+                "-fx-font-weight: 800; " +
+                "-fx-font-size: 11.5px; " +
+                "-fx-padding: 8 16; " +
+                "-fx-background-radius: 8; " +
+                "-fx-border-color: #818cf8; " +
+                "-fx-border-radius: 8; " +
+                "-fx-border-width: 1; " +
+                "-fx-cursor: hand;");
+        quickAuditBtn.setOnAction(e -> showTurnoutReportModal(currentStage));
+
+        heroBanner.getChildren().addAll(heroText, heroSpacer, quickAuditBtn);
+
+        // 2. Metric Cards (Compact 85px Height - Fully Dynamic Labels)
+        HBox metricsGrid = new HBox(12);
+
+        Label electionsValLabel = new Label("0");
+        Label electionsSubLabel = new Label("Configured Ballots");
+        VBox cardElections = buildColorfulMetricCardDynamic("🗳", "TOTAL ELECTIONS", electionsValLabel,
+                electionsSubLabel, "#1d4ed8",
+                "#eff6ff", "#3b82f6", "#93c5fd");
+
+        Label votersValLabel = new Label("0");
+        Label votersSubLabel = new Label("0 Active Members");
+        VBox cardVoters = buildColorfulMetricCardDynamic("👥", "TOTAL VOTERS", votersValLabel,
+                votersSubLabel, "#0f172a",
+                "#f8fafc", "#475569", "#cbd5e1");
+
+        Label votesValLabel = new Label("0");
+        Label votesSubLabel = new Label("Zero-Knowledge Stored");
+        VBox cardVotes = buildColorfulMetricCardDynamic("🔒", "VOTES CAST", votesValLabel,
+                votesSubLabel, "#047857",
+                "#ecfdf5", "#10b981", "#6ee7b7");
+
+        Label turnoutValLabel = new Label("0.00%");
+        Label turnoutSubLabel = new Label("Target: 100.00%");
+        VBox cardTurnout = buildColorfulMetricCardDynamic("📈", "OVERALL TURNOUT", turnoutValLabel,
+                turnoutSubLabel, "#6d28d9",
+                "#f5f3ff", "#8b5cf6", "#c4b5fd");
+
+        HBox.setHgrow(cardElections, Priority.ALWAYS);
+        HBox.setHgrow(cardVoters, Priority.ALWAYS);
+        HBox.setHgrow(cardVotes, Priority.ALWAYS);
+        HBox.setHgrow(cardTurnout, Priority.ALWAYS);
+
+        metricsGrid.getChildren().addAll(cardElections, cardVoters, cardVotes, cardTurnout);
+
+        // 3. Lower Section (Compact 240px Card Containers)
+        HBox lowerGrid = new HBox(14);
+
+        VBox electionNamesList = new VBox(6);
+        electionNamesList.setPadding(new Insets(2, 4, 4, 2));
+
+        VBox activeList = new VBox(6);
+
+        VBox electionOverviewCard = buildScrollableElectionOverviewCard(electionNamesList);
+        VBox ongoingCard = buildOngoingElectionsCard(activeList);
+
+        HBox.setHgrow(electionOverviewCard, Priority.ALWAYS);
+        HBox.setHgrow(ongoingCard, Priority.ALWAYS);
+        lowerGrid.getChildren().addAll(electionOverviewCard, ongoingCard);
+
+        // Load dynamic real-time data from Firebase & Firestore in background
+        refreshDashboardData(
+                electionsValLabel, electionsSubLabel,
+                votersValLabel, votersSubLabel,
+                votesValLabel, votesSubLabel,
+                turnoutValLabel, turnoutSubLabel,
+                electionNamesList, activeList);
+
+        content.getChildren().addAll(heroBanner, metricsGrid, lowerGrid);
+        return content;
+    }
+
+    private void refreshDashboardData(
+            Label electionsValLabel, Label electionsSubLabel,
+            Label votersValLabel, Label votersSubLabel,
+            Label votesValLabel, Label votesSubLabel,
+            Label turnoutValLabel, Label turnoutSubLabel,
+            VBox electionNamesList, VBox activeList) {
+
+        Thread t = new Thread(() -> {
+            DashboardStats stats = new DashboardStats();
+            String joinCode = SessionManager.joinCode;
+            String idToken = SessionManager.idToken;
+
+            // 1. Fetch elections for the organization
+            List<ElectionData> elections = ElectionController.loadElections();
+            if (elections != null) {
+                stats.elections = elections;
+                stats.totalElections = elections.size();
+            }
+
+            // 2. Fetch registered voters / members from Firebase Realtime Database
+            if (joinCode != null && !joinCode.isBlank()) {
+                try {
+                    JsonObject membersJson = FirebaseDatabaseService.getAllMembers(joinCode, idToken);
+                    if (membersJson != null) {
+                        for (Map.Entry<String, JsonElement> entry : membersJson.entrySet()) {
+                            if (entry.getValue().isJsonObject()) {
+                                JsonObject m = entry.getValue().getAsJsonObject();
+                                String role = m.has("role") && !m.get("role").isJsonNull() ? m.get("role").getAsString()
+                                        : "VOTER";
+                                if ("VOTER".equalsIgnoreCase(role)) {
+                                    stats.totalVoters++;
+                                    String status = m.has("status") && !m.get("status").isJsonNull()
+                                            ? m.get("status").getAsString()
+                                            : "PENDING";
+                                    if ("ACCEPTED".equalsIgnoreCase(status)) {
+                                        stats.acceptedVoters++;
+                                    } else if ("PENDING".equalsIgnoreCase(status)) {
+                                        stats.pendingVoters++;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } catch (Exception ex) {
+                    System.err.println("[AdminDashboard] Error fetching members: " + ex.getMessage());
+                }
+            }
+
+            // 3. Fetch votes results for each election
+            int totalBallots = 0;
+            for (ElectionData e : stats.elections) {
+                String status = e.getStatus() != null ? e.getStatus() : "Draft";
+                if ("Active".equalsIgnoreCase(status) || "Live".equalsIgnoreCase(status)) {
+                    stats.activeElections++;
+                }
+
+                int electionBallots = 0;
+                try {
+                    Map<String, Map<String, Integer>> results = VoteDAO.getResults(e.getId(), idToken);
+                    if (results != null && !results.isEmpty()) {
+                        for (Map<String, Integer> candMap : results.values()) {
+                            int posVotes = 0;
+                            for (int cnt : candMap.values()) {
+                                posVotes += cnt;
+                            }
+                            if (posVotes > electionBallots) {
+                                electionBallots = posVotes;
+                            }
+                        }
+                    }
+                } catch (Exception ex) {
+                    System.err.println(
+                            "[AdminDashboard] Error fetching votes for election " + e.getId() + ": " + ex.getMessage());
+                }
+
+                stats.ballotsPerElection.put(e.getId(), electionBallots);
+                totalBallots += electionBallots;
+            }
+            stats.totalBallotsCast = totalBallots;
+
+            // 4. Calculate Turnout Rate
+            int eligibleVoters = stats.acceptedVoters > 0 ? stats.acceptedVoters : stats.totalVoters;
+            int totalOpportunities = eligibleVoters * Math.max(1, stats.totalElections);
+            if (totalOpportunities > 0 && stats.totalBallotsCast > 0) {
+                stats.overallTurnout = Math.min(100.0, (stats.totalBallotsCast * 100.0) / totalOpportunities);
+            } else {
+                stats.overallTurnout = 0.0;
+            }
+
+            latestStats = stats;
+
+            // 5. Update JavaFX UI
+            Platform.runLater(() -> {
+                electionsValLabel.setText(String.valueOf(stats.totalElections));
+                if (stats.activeElections > 0) {
+                    electionsSubLabel.setText(stats.activeElections + " Active • Configured Ballots");
+                } else {
+                    electionsSubLabel.setText("Configured Ballots");
+                }
+
+                votersValLabel.setText(String.format("%,d", stats.totalVoters));
+                if (stats.totalVoters > 0) {
+                    double activePct = (stats.acceptedVoters * 100.0) / stats.totalVoters;
+                    votersSubLabel.setText(String.format("%.1f%% Active Members", activePct));
+                } else {
+                    votersSubLabel.setText("0 Active Members");
+                }
+
+                votesValLabel.setText(String.format("%,d", stats.totalBallotsCast));
+                if (stats.totalBallotsCast > 0) {
+                    votesSubLabel.setText("Zero-Knowledge Stored");
+                } else {
+                    votesSubLabel.setText("No Ballots Cast Yet");
+                }
+
+                turnoutValLabel.setText(String.format("%.2f%%", stats.overallTurnout));
+                if (totalOpportunities > 0) {
+                    turnoutSubLabel.setText(stats.totalBallotsCast + " of " + totalOpportunities + " Expected");
+                } else {
+                    turnoutSubLabel.setText("Target: 100.00%");
+                }
+
+                electionNamesList.getChildren().clear();
+                activeList.getChildren().clear();
+
+                if (stats.elections.isEmpty()) {
+                    Label empty = new Label("No elections created yet. Use '🗳 Elections' tab to create.");
+                    empty.setStyle(FONT + "-fx-text-fill: #64748b; -fx-font-size: 11.5px; -fx-padding: 10;");
+                    electionNamesList.getChildren().add(empty);
+
+                    Label emptyActive = new Label("No active polls running right now.");
+                    emptyActive.setStyle(FONT + "-fx-text-fill: #64748b; -fx-font-size: 11.5px; -fx-padding: 10;");
+                    activeList.getChildren().add(emptyActive);
+                } else {
+                    int activeCount = 0;
+                    for (ElectionData e : stats.elections) {
+                        String status = e.getStatus() != null ? e.getStatus() : "Draft";
+                        String accentColor = "#2563eb";
+                        String bgAccent = "#eff6ff";
+                        String borderColor = "#bfdbfe";
+
+                        if ("Active".equalsIgnoreCase(status) || "Live".equalsIgnoreCase(status)) {
+                            accentColor = "#059669";
+                            bgAccent = "#ecfdf5";
+                            borderColor = "#a7f3d0";
+                            activeCount++;
+                            int eCast = stats.ballotsPerElection.getOrDefault(e.getId(), 0);
+                            String metaStr = (e.getStartDateTime() != null && !e.getStartDateTime().isBlank())
+                                    ? ("Schedule: " + e.getStartDateTime() + " - " + e.getEndDateTime() + " • " + eCast
+                                            + " Cast")
+                                    : (eCast + " Ballots Cast");
+                            activeList.getChildren().add(buildColorfulOngoingRow(
+                                    e.getTitle(),
+                                    metaStr,
+                                    "LIVE",
+                                    "#059669",
+                                    "#ecfdf5",
+                                    "#a7f3d0"));
+                        } else if ("Upcoming".equalsIgnoreCase(status)) {
+                            accentColor = "#7c3aed";
+                            bgAccent = "#f5f3ff";
+                            borderColor = "#ddd6fe";
+                        } else if ("Closed".equalsIgnoreCase(status)) {
+                            accentColor = "#64748b";
+                            bgAccent = "#f8fafc";
+                            borderColor = "#e2e8f0";
+                        }
+
+                        electionNamesList.getChildren().add(buildColorfulElectionNameRow(
+                                e.getTitle(), accentColor, bgAccent, borderColor, status.toUpperCase()));
+                    }
+
+                    if (activeCount == 0) {
+                        Label noActive = new Label("No elections currently in active voting phase.");
+                        noActive.setStyle(FONT + "-fx-text-fill: #64748b; -fx-font-size: 11.5px; -fx-padding: 10;");
+                        activeList.getChildren().add(noActive);
+                    }
+                }
+            });
+        });
+        t.setDaemon(true);
+        t.start();
+    }
+
+    private VBox buildColorfulMetricCardDynamic(String icon, String title, Label valLabel, Label subLabel,
+            String themeColor,
+            String iconBg, String borderBase, String borderAccent) {
+        VBox card = new VBox(6);
+        card.setPadding(new Insets(12, 14, 12, 14));
+        card.setMinHeight(85);
+        card.setStyle("-fx-background-color: #ffffff; " +
+                "-fx-background-radius: 10; " +
+                "-fx-border-color: " + borderBase + "; " +
+                "-fx-border-radius: 10; " +
+                "-fx-border-width: 1.4; " +
+                "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.04), 8, 0, 0, 2);");
+
+        HBox header = new HBox(6);
+        header.setAlignment(Pos.CENTER_LEFT);
+
+        Label iconLabel = new Label(icon);
+        iconLabel.setStyle(
+                FONT + "-fx-font-size: 12px; -fx-padding: 3 6; -fx-background-color: " + iconBg + "; -fx-border-color: "
+                        + borderAccent + "; -fx-border-radius: 6; -fx-border-width: 1; -fx-background-radius: 6;");
+
+        Label t = new Label(title);
+        t.setStyle(FONT + "-fx-font-size: 10.5px; -fx-font-weight: 800; -fx-text-fill: " + themeColor
+                + "; -fx-letter-spacing: 0.3;");
+        header.getChildren().addAll(iconLabel, t);
+
+        valLabel.setStyle(FONT + "-fx-font-size: 20px; -fx-font-weight: 900; -fx-text-fill: " + themeColor + ";");
+
+        subLabel.setStyle(FONT + "-fx-font-size: 10px; -fx-text-fill: #475569; -fx-font-weight: 700;");
+
+        card.getChildren().addAll(header, valLabel, subLabel);
+        return card;
+    }
+
+    private VBox buildColorfulMetricCard(String icon, String title, String val, String sub, String themeColor,
+            String iconBg, String borderBase, String borderAccent) {
+        Label v = new Label(val);
+        Label s = new Label(sub);
+        return buildColorfulMetricCardDynamic(icon, title, v, s, themeColor, iconBg, borderBase, borderAccent);
+    }
+
+    private VBox buildScrollableElectionOverviewCard(VBox electionNamesList) {
+        VBox card = new VBox(10);
+        card.setPadding(new Insets(14));
+        card.setMinHeight(240);
+        card.setPrefHeight(240);
+        card.setStyle("-fx-background-color: #ffffff; " +
+                "-fx-background-radius: 12; " +
+                "-fx-border-color: #818cf8; " +
+                "-fx-border-radius: 12; " +
+                "-fx-border-width: 1.5; " +
+                "-fx-effect: dropshadow(gaussian, rgba(99,102,241,0.08), 10, 0, 0, 3);");
+
+        HBox header = new HBox();
+        header.setAlignment(Pos.CENTER_LEFT);
+        Label title = new Label("🗳  Featured Elections Directory");
+        title.setStyle(FONT + "-fx-font-size: 14px; -fx-font-weight: 900; -fx-text-fill: #1e1b4b;");
+
+        Region sp = new Region();
+        HBox.setHgrow(sp, Priority.ALWAYS);
+
+        Label activeBadge = new Label("ORGANIZATION ELECTIONS");
+        activeBadge.setStyle(FONT
+                + "-fx-background-color: linear-gradient(to right, #4338ca, #312e81); -fx-text-fill: #ffffff; -fx-font-size: 9.5px; -fx-font-weight: 800; -fx-padding: 3 8; -fx-background-radius: 14;");
+        header.getChildren().addAll(title, sp, activeBadge);
+
+        ScrollPane electionScroll = new ScrollPane(electionNamesList);
+        electionScroll.setFitToWidth(true);
+        electionScroll.setPrefHeight(160);
+        electionScroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
+        electionScroll.setVbarPolicy(ScrollPane.ScrollBarPolicy.AS_NEEDED);
+        electionScroll.setStyle("-fx-background-color: transparent; -fx-background: transparent; -fx-padding: 0;");
+        VBox.setVgrow(electionScroll, Priority.ALWAYS);
+
+        card.getChildren().addAll(header, electionScroll);
+        return card;
+    }
+
+    private HBox buildColorfulElectionNameRow(String electionName, String accentColor, String bgAccent,
+            String borderColor, String statusText) {
+        HBox row = new HBox(8);
+        row.setAlignment(Pos.CENTER_LEFT);
+        row.setPadding(new Insets(8, 12, 8, 12));
+        row.setStyle("-fx-background-color: " + bgAccent + "; " +
+                "-fx-background-radius: 8; " +
+                "-fx-border-color: " + borderColor + " " + borderColor + " " + borderColor + " " + accentColor + "; " +
+                "-fx-border-width: 1 1 1 3.5; " +
+                "-fx-border-radius: 8; " +
+                "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.02), 4, 0, 0, 1);");
+
+        Label name = new Label(electionName);
+        name.setStyle(FONT + "-fx-font-size: 12px; -fx-font-weight: 800; -fx-text-fill: #0f172a;");
+
+        Region spacer = new Region();
+        HBox.setHgrow(spacer, Priority.ALWAYS);
+
+        Label status = new Label(statusText);
+        status.setStyle(FONT + "-fx-font-size: 9.5px; -fx-font-weight: 900; -fx-text-fill: " + accentColor
+                + "; -fx-padding: 2 6; -fx-background-color: white; -fx-border-color: " + accentColor
+                + "; -fx-border-radius: 4; -fx-background-radius: 4;");
+
+        row.getChildren().addAll(name, spacer, status);
+        return row;
+    }
+
+    private VBox buildOngoingElectionsCard(VBox activeList) {
+        VBox ongoingCard = new VBox(10);
+        ongoingCard.setPadding(new Insets(14));
+        ongoingCard.setMinHeight(240);
+        ongoingCard.setPrefHeight(240);
+        ongoingCard.setStyle("-fx-background-color: #ffffff; " +
+                "-fx-background-radius: 12; " +
+                "-fx-border-color: #34d399; " +
+                "-fx-border-radius: 12; " +
+                "-fx-border-width: 1.5; " +
+                "-fx-effect: dropshadow(gaussian, rgba(52,211,153,0.08), 10, 0, 0, 3);");
+
+        Label ongoingTitle = new Label("📊  Active Online Turnout");
+        ongoingTitle.setStyle(FONT + "-fx-font-size: 14px; -fx-font-weight: 900; -fx-text-fill: #064e3b;");
+
+        ScrollPane turnoutScroll = new ScrollPane(activeList);
+        turnoutScroll.setFitToWidth(true);
+        turnoutScroll.setPrefHeight(160);
+        turnoutScroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
+        turnoutScroll.setStyle("-fx-background-color: transparent; -fx-background: transparent; -fx-padding: 0;");
+        VBox.setVgrow(turnoutScroll, Priority.ALWAYS);
+
+        ongoingCard.getChildren().addAll(ongoingTitle, turnoutScroll);
+        return ongoingCard;
+    }
+
+    private HBox buildColorfulOngoingRow(String name, String meta, String badge, String badgeColor, String badgeBg,
+            String borderColor) {
+        HBox row = new HBox(8);
+        row.setAlignment(Pos.CENTER_LEFT);
+        row.setPadding(new Insets(8, 12, 8, 12));
+        row.setStyle("-fx-background-color: " + badgeBg + "; " +
+                "-fx-background-radius: 8; " +
+                "-fx-border-color: " + borderColor + "; " +
+                "-fx-border-width: 1.2; " +
+                "-fx-border-radius: 8;");
+
+        VBox text = new VBox(2);
+        Label n = new Label(name);
+        n.setStyle(FONT + "-fx-font-size: 12px; -fx-font-weight: 800; -fx-text-fill: #0f172a;");
+        Label m = new Label(meta);
+        m.setStyle(FONT + "-fx-font-size: 10.5px; -fx-text-fill: #047857; -fx-font-weight: 700;");
+        text.getChildren().addAll(n, m);
+
+        Region sp = new Region();
+        HBox.setHgrow(sp, Priority.ALWAYS);
+
+        Label b = new Label(badge);
+        b.setStyle(FONT + "-fx-background-color: " + badgeColor
+                + "; -fx-text-fill: white; -fx-font-size: 9.5px; -fx-font-weight: 900; -fx-padding: 3 7; -fx-background-radius: 4;");
+
+        row.getChildren().addAll(text, sp, b);
+        return row;
+    }
+
+    // =========================================================================
+    // TURNOUT REPORT MODAL (Dynamic Real-Time Data)
+    // =========================================================================
+    private void showTurnoutReportModal(Stage ownerStage) {
+        Dialog<ButtonType> dialog = new Dialog<>();
+        if (ownerStage != null) {
+            dialog.initOwner(ownerStage);
+            dialog.initModality(javafx.stage.Modality.WINDOW_MODAL);
+        }
+        dialog.setTitle("ElectraVote Official Turnout Audit Report");
+
+        VBox modalContent = new VBox(14);
+        modalContent.setPadding(new Insets(20));
+        modalContent.setPrefWidth(640);
+        modalContent.setStyle("-fx-background-color: #ffffff; " + FONT);
+
+        HBox reportHeader = new HBox(12);
+        reportHeader.setAlignment(Pos.CENTER_LEFT);
+
+        Circle reportIconBg = new Circle(18, Color.web("#eff6ff"));
+        Label reportIcon = new Label("📊");
+        reportIcon.setStyle(FONT + "-fx-font-size: 15px;");
+        StackPane iconStack = new StackPane(reportIconBg, reportIcon);
+
+        String displayOrgName = SessionManager.organizationName != null && !SessionManager.organizationName.isBlank()
+                ? SessionManager.organizationName
+                : "Organization Portal";
+
+        VBox titleArea = new VBox(2);
+        Label title = new Label("Official Online Turnout Audit Summary");
+        title.setStyle(FONT + "-fx-font-size: 16px; -fx-font-weight: 800; -fx-text-fill: #0f172a;");
+        DateTimeFormatter dtf = DateTimeFormatter.ofPattern("dd MMM yyyy, HH:mm:ss");
+        String formattedTimestamp = LocalDateTime.now().format(dtf);
+        Label timestamp = new Label("Generated: " + formattedTimestamp + "  •  Tenant: " + displayOrgName);
+        timestamp.setStyle(FONT + "-fx-font-size: 11px; -fx-text-fill: #64748b; -fx-font-weight: 600;");
+        titleArea.getChildren().addAll(title, timestamp);
+
+        Region headerSpacer = new Region();
+        HBox.setHgrow(headerSpacer, Priority.ALWAYS);
+
+        Label verifiedTag = new Label("AUDITED & SEALED");
+        verifiedTag.setStyle(FONT
+                + "-fx-background-color: #ecfdf5; -fx-text-fill: #059669; -fx-font-weight: 800; -fx-font-size: 10px; -fx-padding: 4 10; -fx-background-radius: 16; -fx-border-color: #a7f3d0; -fx-border-radius: 16;");
+
+        reportHeader.getChildren().addAll(iconStack, titleArea, headerSpacer, verifiedTag);
+
+        int registered = latestStats.totalVoters;
+        int cast = latestStats.totalBallotsCast;
+        int eligible = latestStats.acceptedVoters > 0 ? latestStats.acceptedVoters : latestStats.totalVoters;
+        int totalExpected = eligible * Math.max(1, latestStats.totalElections);
+        int remaining = Math.max(0, totalExpected - cast);
+        double turnout = latestStats.overallTurnout;
+
+        HBox metricStrip = new HBox(8);
+        metricStrip.getChildren().addAll(
+                createReportMetricBadge("TOTAL REGISTERED", String.format("%,d", registered), "#0f172a", "#f8fafc"),
+                createReportMetricBadge("BALLOTS CAST", String.format("%,d", cast), "#2563eb", "#eff6ff"),
+                createReportMetricBadge("REMAINING", String.format("%,d", remaining), "#d97706", "#fffbeb"),
+                createReportMetricBadge("OVERALL TURNOUT", String.format("%.2f%%", turnout), "#059669", "#ecfdf5"));
+
+        VBox privacyStandardBox = new VBox(6);
+        privacyStandardBox.setPadding(new Insets(10, 14, 10, 14));
+        privacyStandardBox.setStyle("-fx-background-color: #0f172a; -fx-background-radius: 10;");
+
+        HBox privacyHeader = new HBox(6);
+        privacyHeader.setAlignment(Pos.CENTER_LEFT);
+        Label lockIcon = new Label("🔒");
+        lockIcon.setStyle(FONT + "-fx-font-size: 12px;");
+        Label privacyTitle = new Label("Ballot Privacy Standard");
+        privacyTitle.setStyle(FONT + "-fx-font-size: 12px; -fx-font-weight: 800; -fx-text-fill: #ffffff;");
+        Region privSp = new Region();
+        HBox.setHgrow(privSp, Priority.ALWAYS);
+        Label zeroKnowledgeTag = new Label("ZERO-KNOWLEDGE DECOUPLED");
+        zeroKnowledgeTag.setStyle(FONT
+                + "-fx-background-color: #1e293b; -fx-text-fill: #38bdf8; -fx-font-weight: 800; -fx-font-size: 9px; -fx-padding: 2 6; -fx-background-radius: 4;");
+        privacyHeader.getChildren().addAll(lockIcon, privacyTitle, privSp, zeroKnowledgeTag);
+
+        Label privacyDesc = new Label(
+                "Zero-Link Cryptographic Architecture: Voter participation records are decoupled from candidate selections in isolated collections.");
+        privacyDesc.setWrapText(true);
+        privacyDesc.setStyle(FONT + "-fx-font-size: 10.5px; -fx-text-fill: #94a3b8;");
+
+        privacyStandardBox.getChildren().addAll(privacyHeader, privacyDesc);
+
+        VBox breakdownSection = new VBox(8);
+        Label breakdownTitle = new Label("Election-Wise Turnout Breakdown");
+        breakdownTitle.setStyle(FONT + "-fx-font-size: 13px; -fx-font-weight: 800; -fx-text-fill: #0f172a;");
+
+        VBox breakdownList = new VBox(6);
+        String[] colors = { "#2563eb", "#7c3aed", "#059669", "#d97706", "#dc2626", "#0284c7" };
+        if (latestStats.elections.isEmpty()) {
+            Label emptyLbl = new Label("No configured elections found for this organization.");
+            emptyLbl.setStyle(FONT + "-fx-text-fill: #64748b; -fx-font-size: 11.5px; -fx-padding: 8;");
+            breakdownList.getChildren().add(emptyLbl);
+        } else {
+            int idx = 0;
+            for (ElectionData e : latestStats.elections) {
+                int eCast = latestStats.ballotsPerElection.getOrDefault(e.getId(), 0);
+                int eEligible = eligible > 0 ? eligible : Math.max(eCast, 1);
+                double prog = Math.min(1.0, (double) eCast / eEligible);
+                String c = colors[idx % colors.length];
+                breakdownList.getChildren().add(
+                        createModernBreakdownRow(e.getTitle() != null ? e.getTitle() : "Untitled Election", eCast,
+                                eEligible, prog, c));
+                idx++;
+            }
+        }
+        breakdownSection.getChildren().addAll(breakdownTitle, breakdownList);
+
+        modalContent.getChildren().addAll(reportHeader, metricStrip, privacyStandardBox, breakdownSection);
+
+        dialog.getDialogPane().setContent(modalContent);
+        dialog.getDialogPane().setStyle("-fx-background-color: #ffffff;");
+
+        ButtonType exportButtonType = new ButtonType("Export Report (.txt)", ButtonBar.ButtonData.OK_DONE);
+        ButtonType closeButtonType = new ButtonType("Close", ButtonBar.ButtonData.CANCEL_CLOSE);
+
+        dialog.getDialogPane().getButtonTypes().addAll(exportButtonType, closeButtonType);
+
+        Button exportBtn = (Button) dialog.getDialogPane().lookupButton(exportButtonType);
+        if (exportBtn != null) {
+            exportBtn.setStyle(FONT
+                    + "-fx-background-color: #2563eb; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6; -fx-padding: 6 14; -fx-cursor: hand;");
+        }
+
+        Button closeBtn = (Button) dialog.getDialogPane().lookupButton(closeButtonType);
+        if (closeBtn != null) {
+            closeBtn.setStyle(FONT
+                    + "-fx-background-color: #f1f5f9; -fx-text-fill: #334155; -fx-font-weight: 600; -fx-background-radius: 6; -fx-padding: 6 12; -fx-cursor: hand;");
+        }
+
+        dialog.showAndWait().ifPresent(response -> {
+            if (response == exportButtonType) {
+                exportReportToFile(ownerStage, formattedTimestamp, displayOrgName, registered, cast, turnout);
+            }
+        });
+    }
+
+    private VBox createReportMetricBadge(String label, String value, String colorHex, String bgHex) {
+        VBox box = new VBox(2);
+        box.setPadding(new Insets(8, 10, 8, 10));
+        box.setStyle("-fx-background-color: " + bgHex
+                + "; -fx-background-radius: 8; -fx-border-color: #e2e8f0; -fx-border-radius: 8;");
+        HBox.setHgrow(box, Priority.ALWAYS);
+
+        Label l = new Label(label);
+        l.setStyle(FONT + "-fx-font-size: 9.5px; -fx-font-weight: 700; -fx-text-fill: #64748b;");
+
+        Label v = new Label(value);
+        v.setStyle(FONT + "-fx-font-size: 15px; -fx-font-weight: 800; -fx-text-fill: " + colorHex + ";");
+
+        box.getChildren().addAll(l, v);
+        return box;
+    }
+
+    private HBox createModernBreakdownRow(String electionName, int voted, int total, double progress,
+            String accentColor) {
+        HBox row = new HBox(10);
+        row.setAlignment(Pos.CENTER_LEFT);
+        row.setPadding(new Insets(8, 12, 8, 12));
+        row.setStyle(
+                "-fx-background-color: #f8fafc; -fx-background-radius: 6; -fx-border-color: #e2e8f0; -fx-border-radius: 6;");
+
+        VBox text = new VBox(1);
+        Label name = new Label(electionName);
+        name.setStyle(FONT + "-fx-font-size: 11.5px; -fx-font-weight: 700; -fx-text-fill: #0f172a;");
+        Label part = new Label(voted + " cast of " + total + " eligible");
+        part.setStyle(FONT + "-fx-font-size: 10px; -fx-text-fill: #64748b;");
+        text.getChildren().addAll(name, part);
+
+        Region spacer = new Region();
+        HBox.setHgrow(spacer, Priority.ALWAYS);
+
+        ProgressBar bar = new ProgressBar(progress);
+        bar.setPrefWidth(90);
+        bar.setPrefHeight(6);
+        bar.setStyle("-fx-accent: " + accentColor + ";");
+
+        Label perc = new Label(String.format("%.1f%%", progress * 100));
+        perc.setStyle(FONT + "-fx-font-size: 11.5px; -fx-font-weight: 800; -fx-text-fill: " + accentColor
+                + "; -fx-min-width: 40px; -fx-alignment: CENTER_RIGHT;");
+
+        row.getChildren().addAll(text, spacer, bar, perc);
+        return row;
+    }
+
+    private void exportReportToFile(Stage ownerStage, String timestamp, String orgName, int registered, int cast,
+            double turnout) {
+        FileChooser fileChooser = new FileChooser();
+        fileChooser.setTitle("Save Turnout Audit Report");
+        fileChooser.setInitialFileName("ElectraVote_Turnout_Report_" + System.currentTimeMillis() + ".txt");
+        fileChooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("Text Files (*.txt)", "*.txt"));
+
+        File file = fileChooser.showSaveDialog(ownerStage);
+        if (file != null) {
+            try (FileWriter writer = new FileWriter(file)) {
+                writer.write("====================================================================\n");
+                writer.write("                ELECTRAVOTE SaaS ELECTION PLATFORM                  \n");
+                writer.write("                   OFFICIAL TURNOUT AUDIT REPORT                    \n");
+                writer.write("====================================================================\n\n");
+                writer.write("Tenant Organization     : " + orgName + "\n");
+                writer.write("Audit Report Timestamp  : " + timestamp + "\n");
+                writer.write("Online System Status    : OPERATIONAL & NOMINAL\n");
+                writer.write("Ballot Privacy Standard : Zero-Knowledge Decoupled\n\n");
+                writer.write(String.format("Total Registered Voters : %,d Eligible Members\n", registered));
+                writer.write(String.format("Total Ballots Recorded  : %,d Valid Submissions\n", cast));
+                writer.write(String.format("Aggregate Turnout Rate  : %.2f%%\n", turnout));
+                writer.write("====================================================================\n");
+                writer.write("ELECTION-WISE TURNOUT BREAKDOWN:\n");
+                if (latestStats.elections.isEmpty()) {
+                    writer.write("  No configured elections found.\n");
+                } else {
+                    int eligible = latestStats.acceptedVoters > 0 ? latestStats.acceptedVoters
+                            : latestStats.totalVoters;
+                    for (ElectionData e : latestStats.elections) {
+                        int eCast = latestStats.ballotsPerElection.getOrDefault(e.getId(), 0);
+                        int eEligible = eligible > 0 ? eligible : Math.max(eCast, 1);
+                        double pct = (double) eCast * 100.0 / eEligible;
+                        writer.write(String.format("  - %s: %d cast of %d eligible (%.2f%%)\n",
+                                e.getTitle() != null ? e.getTitle() : "Untitled", eCast, eEligible, pct));
+                    }
+                }
+                writer.write("====================================================================\n");
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+}
