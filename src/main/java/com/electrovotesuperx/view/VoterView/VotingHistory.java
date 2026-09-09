@@ -68,7 +68,7 @@ public class VotingHistory {
                 VBox loadingBox = new VBox(10);
                 loadingBox.setAlignment(Pos.CENTER);
                 loadingBox.setPadding(new Insets(30));
-                loadingBox.getChildren().addAll(new ProgressIndicator(), new Label("Fetching cryptographic vote receipts from Firebase..."));
+                loadingBox.getChildren().addAll(new ProgressIndicator(), new Label("Fetching official vote receipts..."));
                 historyList.getChildren().add(loadingBox);
 
                 Thread t = new Thread(() -> {

@@ -102,6 +102,30 @@ public class ApplyCandidateView {
                         "-fx-border-radius: 14;" +
                         "-fx-effect: dropshadow(three-pass-box, rgba(99, 102, 241, 0.08), 12, 0, 0, 4);");
 
+        // Locked Election Alert Banner (initially hidden or shown when active election is selected)
+        VBox lockedElectionBanner = new VBox(8);
+        lockedElectionBanner.setPadding(new Insets(14, 18, 14, 18));
+        lockedElectionBanner.setStyle(
+                "-fx-background-color: #FEF2F2;" +
+                "-fx-background-radius: 10;" +
+                "-fx-border-color: #EF4444;" +
+                "-fx-border-width: 1.5;" +
+                "-fx-border-radius: 10;"
+        );
+        lockedElectionBanner.setVisible(false);
+        lockedElectionBanner.setManaged(false);
+
+        Label lockedTitle = new Label("🔒 Candidate Nominations Closed for This Election");
+        lockedTitle.setStyle("-fx-font-weight: 800; -fx-text-fill: #991B1B; -fx-font-size: 14px;");
+
+        Label lockedDesc = new Label(
+                "Voting is currently OPEN (or completed) for this election. Under ElectraVote governance rules, " +
+                "candidate rosters are strictly frozen once voting commences to prevent mid-election ballot manipulation. " +
+                "New candidate nominations can only be submitted during the Draft / Planning phase before voting opens.");
+        lockedDesc.setStyle("-fx-text-fill: #B91C1C; -fx-font-size: 12px;");
+        lockedDesc.setWrapText(true);
+        lockedElectionBanner.getChildren().addAll(lockedTitle, lockedDesc);
+
         // 1. Election Selection Field
         VBox electionBox = new VBox(6);
         Label electionLabel = new Label("Target Election *");
@@ -181,62 +205,6 @@ public class ApplyCandidateView {
         statusMsg.setStyle("-fx-font-weight: bold; -fx-font-size: 12.5px;");
         statusMsg.setVisible(false);
 
-        // Load elections from Firestore asynchronously
-        List<ElectionData> loadedElections = new ArrayList<>();
-        Thread loadThread = new Thread(() -> {
-            try {
-                String joinCode = SessionManager.joinCode;
-                String idToken = SessionManager.idToken;
-                if (joinCode != null && !joinCode.isBlank()) {
-                    List<ElectionData> elecs = ElectionDAO.getElectionsByOrg(joinCode, idToken);
-                    Platform.runLater(() -> {
-                        loadedElections.clear();
-                        loadedElections.addAll(elecs);
-                        electionDropdown.getItems().clear();
-
-                        if (elecs.isEmpty()) {
-                            electionDropdown.setPromptText("No elections open in organization");
-                        } else {
-                            for (ElectionData e : elecs) {
-                                String t = e.getTitle() != null ? e.getTitle() : "Untitled Election";
-                                electionDropdown.getItems().add(t);
-                            }
-                            if (preselectedElectionTitle != null
-                                    && electionDropdown.getItems().contains(preselectedElectionTitle)) {
-                                electionDropdown.setValue(preselectedElectionTitle);
-                            } else {
-                                electionDropdown.getSelectionModel().selectFirst();
-                            }
-                        }
-                    });
-                }
-            } catch (Exception ex) {
-                ex.printStackTrace();
-            }
-        });
-        loadThread.setDaemon(true);
-        loadThread.start();
-
-        // Update positions whenever an election is selected
-        electionDropdown.setOnAction(e -> {
-            String selTitle = electionDropdown.getValue();
-            if (selTitle != null) {
-                ElectionData match = loadedElections.stream()
-                        .filter(el -> selTitle.equals(el.getTitle()))
-                        .findFirst()
-                        .orElse(null);
-                positionDropdown.getItems().clear();
-                if (match != null && match.getPositions() != null && !match.getPositions().isEmpty()) {
-                    positionDropdown.getItems().addAll(match.getPositions());
-                    positionDropdown.getSelectionModel().selectFirst();
-                } else {
-                    positionDropdown.getItems().addAll("President", "Vice President", "Secretary", "Treasurer",
-                            "Representative");
-                    positionDropdown.getSelectionModel().selectFirst();
-                }
-            }
-        });
-
         HBox buttonRow = new HBox(12);
         buttonRow.setAlignment(Pos.CENTER_RIGHT);
 
@@ -259,17 +227,165 @@ public class ApplyCandidateView {
                         "-fx-background-radius: 8;" +
                         "-fx-cursor: hand;");
 
+        // Helper to check if an election is active/live/open/closed/started (locked for nominations)
+        java.util.function.Predicate<ElectionData> isElectionLocked = el -> {
+            if (el == null) return false;
+            String st = el.getStatus() != null ? el.getStatus().trim() : "Draft";
+            if ("Active".equalsIgnoreCase(st) || "Live".equalsIgnoreCase(st) ||
+                "Open".equalsIgnoreCase(st) || "OPEN".equalsIgnoreCase(st) ||
+                "Closed".equalsIgnoreCase(st) || "CLOSED".equalsIgnoreCase(st) ||
+                "Ended".equalsIgnoreCase(st)) {
+                return true;
+            }
+
+            // Chronological Check: If current date/time >= startDateTime, nominations are CLOSED!
+            String startStr = el.getStartDateTime();
+            if (startStr != null && !startStr.isBlank()) {
+                try {
+                    java.time.format.DateTimeFormatter formatter = java.time.format.DateTimeFormatter.ofPattern("dd MMM yyyy HH:mm", java.util.Locale.ENGLISH);
+                    java.time.LocalDateTime startTime = java.time.LocalDateTime.parse(startStr.trim(), formatter);
+                    if (java.time.LocalDateTime.now().isAfter(startTime) || java.time.LocalDateTime.now().isEqual(startTime)) {
+                        return true;
+                    }
+                } catch (Exception ignored) {}
+            }
+
+            String endStr = el.getEndDateTime();
+            if (endStr != null && !endStr.isBlank()) {
+                try {
+                    java.time.format.DateTimeFormatter formatter = java.time.format.DateTimeFormatter.ofPattern("dd MMM yyyy HH:mm", java.util.Locale.ENGLISH);
+                    java.time.LocalDateTime endTime = java.time.LocalDateTime.parse(endStr.trim(), formatter);
+                    if (java.time.LocalDateTime.now().isAfter(endTime) || java.time.LocalDateTime.now().isEqual(endTime)) {
+                        return true;
+                    }
+                } catch (Exception ignored) {}
+            }
+
+            return false;
+        };
+
+        // Load elections from Firestore asynchronously
+        List<ElectionData> loadedElections = new ArrayList<>();
+        Thread loadThread = new Thread(() -> {
+            try {
+                String joinCode = SessionManager.joinCode;
+                String idToken = SessionManager.idToken;
+                if (joinCode != null && !joinCode.isBlank()) {
+                    List<ElectionData> elecs = ElectionDAO.getElectionsByOrg(joinCode, idToken);
+                    Platform.runLater(() -> {
+                        loadedElections.clear();
+                        loadedElections.addAll(elecs);
+                        electionDropdown.getItems().clear();
+
+                        if (elecs.isEmpty()) {
+                            electionDropdown.setPromptText("No elections found in organization");
+                        } else {
+                            for (ElectionData e : elecs) {
+                                String t = e.getTitle() != null ? e.getTitle() : "Untitled Election";
+                                String st = e.getStatus() != null ? e.getStatus().trim() : "Draft";
+                                if (isElectionLocked.test(e)) {
+                                    electionDropdown.getItems().add(t + "  [🔒 ELECTION STARTED / ACTIVE - NOMINATIONS CLOSED]");
+                                } else {
+                                    electionDropdown.getItems().add(t + "  [✅ DRAFT - OPEN FOR NOMINATIONS]");
+                                }
+                            }
+
+                            // Match preselected title or select first
+                            if (preselectedElectionTitle != null) {
+                                for (String item : electionDropdown.getItems()) {
+                                    if (item.startsWith(preselectedElectionTitle)) {
+                                        electionDropdown.setValue(item);
+                                        break;
+                                    }
+                                }
+                            }
+                            if (electionDropdown.getValue() == null && !electionDropdown.getItems().isEmpty()) {
+                                electionDropdown.getSelectionModel().selectFirst();
+                            }
+                        }
+                    });
+                }
+            } catch (Exception ex) {
+                ex.printStackTrace();
+            }
+        });
+        loadThread.setDaemon(true);
+        loadThread.start();
+
+        // Update positions & locked state whenever an election is selected
+        electionDropdown.setOnAction(e -> {
+            String selItem = electionDropdown.getValue();
+            if (selItem != null) {
+                ElectionData match = loadedElections.stream()
+                        .filter(el -> selItem.startsWith(el.getTitle()))
+                        .findFirst()
+                        .orElse(null);
+
+                boolean locked = isElectionLocked.test(match);
+
+                if (locked) {
+                    lockedElectionBanner.setVisible(true);
+                    lockedElectionBanner.setManaged(true);
+                    submitBtn.setDisable(true);
+                    submitBtn.setStyle("-fx-background-color: #94A3B8; -fx-text-fill: white; -fx-font-weight: bold; -fx-padding: 10 24; -fx-background-radius: 8;");
+                    statusMsg.setText("🔒 Candidate nominations are locked because this election is currently OPEN for voting (or closed).");
+                    statusMsg.setStyle("-fx-text-fill: " + RED + "; -fx-font-weight: bold;");
+                    statusMsg.setVisible(true);
+                } else {
+                    lockedElectionBanner.setVisible(false);
+                    lockedElectionBanner.setManaged(false);
+                    submitBtn.setDisable(false);
+                    submitBtn.setStyle("-fx-background-color: linear-gradient(to right, #10B981, #059669); -fx-text-fill: white; -fx-font-weight: bold; -fx-padding: 10 24; -fx-background-radius: 8; -fx-cursor: hand;");
+                    statusMsg.setVisible(false);
+                }
+
+                positionDropdown.getItems().clear();
+                if (match != null && match.getPositions() != null && !match.getPositions().isEmpty()) {
+                    positionDropdown.getItems().addAll(match.getPositions());
+                    positionDropdown.getSelectionModel().selectFirst();
+                } else {
+                    positionDropdown.getItems().addAll("President", "Vice President", "Secretary", "Treasurer",
+                            "Representative");
+                    positionDropdown.getSelectionModel().selectFirst();
+                }
+            }
+        });
+
         submitBtn.setOnAction(e -> {
-            String selectedElection = electionDropdown.getValue();
-            String selectedPos = positionDropdown.getValue() != null ? positionDropdown.getValue().toString().trim()
-                    : "";
+            String selectedDropdownItem = electionDropdown.getValue();
+            if (selectedDropdownItem == null) {
+                statusMsg.setText("⚠️ Please select an election.");
+                statusMsg.setStyle("-fx-text-fill: " + RED + "; -fx-font-weight: bold;");
+                statusMsg.setVisible(true);
+                return;
+            }
+
+            ElectionData match = loadedElections.stream()
+                    .filter(el -> selectedDropdownItem.startsWith(el.getTitle()))
+                    .findFirst()
+                    .orElse(null);
+
+            // Strict Edge-Case Guard: Block any nomination if election is Open/Active/Live/Closed
+            if (isElectionLocked.test(match)) {
+                statusMsg.setText("❌ Action Rejected: This election is OPEN for voting. Candidates cannot apply to open elections.");
+                statusMsg.setStyle("-fx-text-fill: " + RED + "; -fx-font-weight: bold;");
+                statusMsg.setVisible(true);
+                Alert alert = new Alert(Alert.AlertType.WARNING);
+                alert.setTitle("Nominations Closed");
+                alert.setHeaderText("Voting is Currently Active");
+                alert.setContentText("Nominations cannot be accepted for an active/open election. Candidates can only be nominated while an election is in Draft status.");
+                alert.showAndWait();
+                return;
+            }
+
+            String selectedElection = match != null ? match.getTitle() : selectedDropdownItem;
+            String selectedPos = positionDropdown.getValue() != null ? positionDropdown.getValue().toString().trim() : "";
             String name = nameField.getText().trim();
             String mobile = mobileField.getText().trim();
             String email = emailField.getText().trim();
             String manifesto = descArea.getText().trim();
 
-            if (selectedElection == null || selectedPos.isEmpty() || name.isEmpty() || mobile.isEmpty()
-                    || email.isEmpty() || manifesto.isEmpty()) {
+            if (selectedPos.isEmpty() || name.isEmpty() || mobile.isEmpty() || email.isEmpty() || manifesto.isEmpty()) {
                 statusMsg.setText("⚠️ Please fill in all required nomination fields.");
                 statusMsg.setStyle("-fx-text-fill: " + RED + "; -fx-font-weight: bold;");
                 statusMsg.setVisible(true);
@@ -277,19 +393,14 @@ public class ApplyCandidateView {
             }
 
             submitBtn.setDisable(true);
-            submitBtn.setText("Submitting to Cloud...");
-            statusMsg.setText("Transmitting nomination to Firebase...");
+            submitBtn.setText("Submitting nomination...");
+            statusMsg.setText("Submitting nomination application...");
             statusMsg.setStyle("-fx-text-fill: " + BLUE + "; -fx-font-weight: bold;");
             statusMsg.setVisible(true);
 
             String candidateId = UUID.randomUUID().toString();
             String joinCode = SessionManager.joinCode != null ? SessionManager.joinCode : "DEMO_ORG";
             String idToken = SessionManager.idToken != null ? SessionManager.idToken : "";
-
-            ElectionData match = loadedElections.stream()
-                    .filter(el -> selectedElection.equals(el.getTitle()))
-                    .findFirst()
-                    .orElse(null);
             String electionId = match != null ? match.getId() : selectedElection;
 
             Candidate candidate = new Candidate(
@@ -333,7 +444,7 @@ public class ApplyCandidateView {
         buttonRow.getChildren().addAll(cancelBtn, submitBtn);
 
         formCard.getChildren().addAll(
-                electionBox, posBox, nameBox, mobileBox, emailBox, descFieldBox, statusMsg, new Separator(), buttonRow);
+                lockedElectionBanner, electionBox, posBox, nameBox, mobileBox, emailBox, descFieldBox, statusMsg, new Separator(), buttonRow);
 
         formContainer.getChildren().addAll(heading, new Separator(), formCard);
 
@@ -369,7 +480,7 @@ public class ApplyCandidateView {
         title.setFill(Color.web("#064E3B"));
 
         Text desc = new Text("Your candidate application for " + position + " (" + election
-                + ") has been uploaded to Firebase Firestore and is pending review by the election administrator.");
+                + ") has been submitted successfully and is pending review by the election administrator.");
         desc.setFont(Font.font(13));
         desc.setFill(Color.web(SECONDARY));
         desc.setWrappingWidth(480);

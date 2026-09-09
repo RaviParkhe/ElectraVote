@@ -159,9 +159,6 @@ public class Sidebar extends VBox {
                 Button election = createButton(
                                 "◫   Elections");
 
-                Button members = createButton(
-                                "♙   Members");
-
                 Button verify = createButton(
                                 "✓   Voter Verification");
 
@@ -178,10 +175,6 @@ public class Sidebar extends VBox {
 
                 if ("ElectionPage".equals(activePage)) {
                         election.setStyle(ACTIVE);
-                }
-
-                if ("MemberPage".equals(activePage)) {
-                        members.setStyle(ACTIVE);
                 }
 
                 if ("VerificationPage".equals(activePage)) {
@@ -203,10 +196,6 @@ public class Sidebar extends VBox {
                 election.setOnAction(e -> navigate(
                                 election,
                                 new OfflineElectionPage().getScene()));
-
-                members.setOnAction(e -> navigate(
-                                members,
-                                new OfflineMemberPage().getScene()));
 
                 verify.setOnAction(e -> navigate(
                                 verify,
@@ -255,7 +244,6 @@ public class Sidebar extends VBox {
                 menu.getChildren().addAll(
                                 home,
                                 election,
-                                members,
                                 verify,
                                 status,
                                 exitToHome);

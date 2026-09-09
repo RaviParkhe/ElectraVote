@@ -47,7 +47,7 @@ public final class DatabaseConfig {
                         CREATE TABLE IF NOT EXISTS elections (
                             election_id TEXT PRIMARY KEY,
                             name TEXT NOT NULL UNIQUE,
-                            status TEXT NOT NULL DEFAULT 'OPEN'
+                            status TEXT NOT NULL DEFAULT 'DRAFT'
                         )
                         """);
 
@@ -143,10 +143,26 @@ public final class DatabaseConfig {
                             token TEXT,
 
                             details TEXT,
+                            officer_email TEXT,
 
                             created_at TEXT NOT NULL
                         )
                         """);
+
+                // =================================================
+                // IMPORTANT DATABASE MIGRATION
+                //
+                // If existing electravote.db was created before
+                // officer_email was added, CREATE TABLE IF NOT
+                // EXISTS will NOT add the column. Use
+                // addColumnIfMissing to safely add it.
+                // =================================================
+
+                addColumnIfMissing(
+                        connection,
+                        "audit_logs",
+                        "officer_email",
+                        "TEXT");
 
                 // =================================================
                 // INDEXES
@@ -180,6 +196,77 @@ public final class DatabaseConfig {
                         CREATE INDEX IF NOT EXISTS
                         idx_audit_election
                         ON audit_logs(election_id)
+                        """);
+
+                // =================================================
+                // 6. POLLING OFFICER REQUESTS
+                // =================================================
+
+                statement.executeUpdate("""
+                        CREATE TABLE IF NOT EXISTS polling_officer_requests (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            uid TEXT UNIQUE,
+                            name TEXT NOT NULL,
+                            email TEXT NOT NULL UNIQUE,
+                            station_name TEXT NOT NULL,
+                            phone TEXT NOT NULL,
+                            status TEXT NOT NULL DEFAULT 'PENDING',
+                            approval_pin TEXT,
+                            created_at TEXT NOT NULL,
+                            reviewed_at TEXT
+                        )
+                        """);
+
+                statement.executeUpdate("""
+                        CREATE INDEX IF NOT EXISTS
+                        idx_officer_req_status
+                        ON polling_officer_requests(status)
+                        """);
+
+                statement.executeUpdate("""
+                        CREATE INDEX IF NOT EXISTS
+                        idx_officer_req_email
+                        ON polling_officer_requests(email)
+                        """);
+
+                addColumnIfMissing(
+                        connection,
+                        "polling_officer_requests",
+                        "pin_generated_at",
+                        "TEXT");
+
+                // =================================================
+                // RISK ANALYSIS: OTP ATTEMPTS TABLE
+                //
+                // Every OTP send and OTP verification attempt is
+                // logged here. Enables:
+                //
+                //  - Failure count  → lock after 5 bad attempts
+                //  - Flood count    → flag if 10 requests in 2 min
+                //  - Officer veloc. → flag if 200 verif. in 60 min
+                // =================================================
+
+                statement.executeUpdate("""
+                        CREATE TABLE IF NOT EXISTS otp_attempts (
+                            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                            voter_id      TEXT NOT NULL,
+                            election_id   TEXT NOT NULL,
+                            officer_email TEXT,
+                            success       INTEGER NOT NULL DEFAULT 0,
+                            attempted_at  TEXT NOT NULL
+                        )
+                        """);
+
+                statement.executeUpdate("""
+                        CREATE INDEX IF NOT EXISTS
+                        idx_otp_attempts_voter_election
+                        ON otp_attempts(voter_id, election_id, attempted_at)
+                        """);
+
+                statement.executeUpdate("""
+                        CREATE INDEX IF NOT EXISTS
+                        idx_otp_attempts_officer
+                        ON otp_attempts(officer_email, attempted_at)
                         """);
             }
 

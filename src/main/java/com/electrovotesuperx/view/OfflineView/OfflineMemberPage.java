@@ -389,63 +389,8 @@ public class OfflineMemberPage {
                                 title,
                                 countLabel);
 
-                // =====================================================
-                // SPACER
-                // =====================================================
-
-                Region spacer = new Region();
-
-                HBox.setHgrow(
-                                spacer,
-                                Priority.ALWAYS);
-
-                // =====================================================
-                // ADD MEMBER BUTTON
-                // =====================================================
-
-                Button addButton = new Button("+  Add Member");
-
-                addButton.setPrefWidth(135);
-
-                addButton.setPrefHeight(40);
-
-                addButton.setStyle(
-                                "-fx-background-color:#356AE6;" +
-                                                "-fx-text-fill:white;" +
-                                                "-fx-font-size:13;" +
-                                                "-fx-font-weight:bold;" +
-                                                "-fx-background-radius:20;" +
-                                                "-fx-cursor:hand;");
-
-                addButton.setOnMouseEntered(e -> {
-
-                        addButton.setStyle(
-                                        "-fx-background-color:#2858C7;" +
-                                                        "-fx-text-fill:white;" +
-                                                        "-fx-font-size:13;" +
-                                                        "-fx-font-weight:bold;" +
-                                                        "-fx-background-radius:20;" +
-                                                        "-fx-cursor:hand;");
-                });
-
-                addButton.setOnMouseExited(e -> {
-
-                        addButton.setStyle(
-                                        "-fx-background-color:#356AE6;" +
-                                                        "-fx-text-fill:white;" +
-                                                        "-fx-font-size:13;" +
-                                                        "-fx-font-weight:bold;" +
-                                                        "-fx-background-radius:20;" +
-                                                        "-fx-cursor:hand;");
-                });
-
-                addButton.setOnAction(
-                                e -> showAddDialog());
-
                 row.getChildren().addAll(
-                                titleBox,
-                                spacer,
-                                addButton);
+                                titleBox);
 
                 return row;
         }
@@ -497,11 +442,6 @@ public class OfflineMemberPage {
                 header.add(
                                 headerLabel("ACCOUNT"),
                                 3,
-                                0);
-
-                header.add(
-                                headerLabel("ACTIONS"),
-                                4,
                                 0);
 
                 header.setPadding(
@@ -773,8 +713,12 @@ public class OfflineMemberPage {
 
                         for (Election election : databaseElections) {
 
-                                if ("OPEN".equalsIgnoreCase(
-                                                election.getStatus())) {
+                                // Show DRAFT (enrollment window) AND OPEN elections.
+                                // DRAFT = members can be added.
+                                // OPEN  = roll is frozen, shown read-only.
+                                // CLOSED elections are hidden from member management.
+                                if ("DRAFT".equalsIgnoreCase(election.getStatus())
+                                                || "OPEN".equalsIgnoreCase(election.getStatus())) {
 
                                         electionBox.getItems().add(
                                                         new ElectionOption(
@@ -790,7 +734,7 @@ public class OfflineMemberPage {
                         e.printStackTrace();
 
                         showWarning(
-                                        "Could not load active elections.\n\n"
+                                        "Could not load elections.\n\n"
                                                         + e.getMessage());
                 }
         }
@@ -1171,7 +1115,7 @@ public class OfflineMemberPage {
                                 "Active");
 
                 // =====================================================
-                // ACTIONS
+                // ACTIONS (view only for polling officer)
                 // =====================================================
 
                 HBox actions = new HBox(4);
@@ -1181,49 +1125,13 @@ public class OfflineMemberPage {
 
                 Button view = actionButton("👁");
 
-                Button edit = actionButton("✎");
-
-                Button suspend = actionButton(
-                                "Active".equalsIgnoreCase(
-                                                member.getStatus())
-                                                                ? "⊘"
-                                                                : "✓");
-
-                Button delete = actionButton("🗑");
-
                 view.setTooltip(
                                 new Tooltip("View details"));
-
-                edit.setTooltip(
-                                new Tooltip("Edit member"));
-
-                suspend.setTooltip(
-                                new Tooltip(
-                                                "Active".equalsIgnoreCase(
-                                                                member.getStatus())
-                                                                                ? "Suspend member"
-                                                                                : "Activate member"));
-
-                delete.setTooltip(
-                                new Tooltip("Delete member"));
 
                 view.setOnAction(
                                 e -> showDetails(member));
 
-                edit.setOnAction(
-                                e -> editMember(member));
-
-                suspend.setOnAction(
-                                e -> changeStatus(member));
-
-                delete.setOnAction(
-                                e -> deleteMember(member));
-
-                actions.getChildren().addAll(
-                                view,
-                                edit,
-                                suspend,
-                                delete);
+                actions.getChildren().add(view);
 
                 // =====================================================
                 // ADD CELLS
@@ -1397,7 +1305,25 @@ public class OfflineMemberPage {
                 if (electionBox.getValue() == null) {
 
                         showWarning(
-                                        "Please select an active election first.");
+                                        "Please select an election in DRAFT status to add members.");
+
+                        return;
+                }
+
+                // =====================================================
+                // BLOCK ADDITIONS WHEN ELECTION IS OPEN
+                // The electoral roll is frozen once voting starts.
+                // =====================================================
+
+                ElectionOption selected = electionBox.getValue();
+
+                if ("OPEN".equalsIgnoreCase(selected.getStatus())) {
+
+                        showWarning(
+                                        "Electoral Roll Frozen\n\n" +
+                                        "This election is currently OPEN (voting in progress).\n" +
+                                        "Voter enrollment was closed when voting started.\n\n" +
+                                        "To make changes, the election must be CLOSED first.");
 
                         return;
                 }
@@ -1904,6 +1830,8 @@ public class OfflineMemberPage {
 
                 private final String name;
 
+                private final String status;
+
                 public ElectionOption(
                                 String electionId,
                                 String name,
@@ -1912,6 +1840,8 @@ public class OfflineMemberPage {
                         this.electionId = electionId;
 
                         this.name = name;
+
+                        this.status = status;
                 }
 
                 public String getElectionId() {
@@ -1924,10 +1854,19 @@ public class OfflineMemberPage {
                         return name;
                 }
 
+                public String getStatus() {
+
+                        return status;
+                }
+
                 @Override
                 public String toString() {
 
-                        return name;
+                        // Show status badge next to name in the dropdown
+                        String badge = "DRAFT".equalsIgnoreCase(status)
+                                        ? " [DRAFT]"
+                                        : " [OPEN ✓]";
+                        return name + badge;
                 }
         }
 }

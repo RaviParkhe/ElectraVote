@@ -220,6 +220,102 @@ public class ElectionDAO {
         }
 
         // =====================================================
+        // REOPEN ELECTION
+        // =====================================================
+
+        public void reopenElection(String electionId)
+                        throws SQLException {
+
+                String sql = """
+                                    UPDATE elections
+                                    SET status = 'OPEN'
+                                    WHERE election_id = ?
+                                """;
+
+                try (
+                                Connection connection = DatabaseConfig.getConnection();
+
+                                PreparedStatement statement = connection.prepareStatement(sql)) {
+
+                        statement.setString(1, electionId);
+
+                        statement.executeUpdate();
+                }
+        }
+
+        // =====================================================
+        // OPEN ELECTION (ALIAS FOR reopenElection – BACKWARD COMPAT)
+        // =====================================================
+
+        public void openElection(String electionId)
+                        throws SQLException {
+                reopenElection(electionId);
+        }
+
+        // =====================================================
+        // UPDATE ELECTION
+        // =====================================================
+
+        public boolean updateElection(String electionId, String newName, String newStatus)
+                        throws SQLException {
+
+                String sql = """
+                                    UPDATE elections
+                                    SET name = ?, status = ?
+                                    WHERE election_id = ?
+                                """;
+
+                try (
+                                Connection connection = DatabaseConfig.getConnection();
+
+                                PreparedStatement statement = connection.prepareStatement(sql)) {
+
+                        statement.setString(1, newName.trim());
+                        statement.setString(2, newStatus.trim().toUpperCase());
+                        statement.setString(3, electionId.trim());
+
+                        return statement.executeUpdate() > 0;
+                }
+        }
+
+        // =====================================================
+        // GET VOTER COUNT FOR ELECTION
+        // =====================================================
+
+        public int getVoterCountForElection(String electionId) {
+                String sql = "SELECT COUNT(*) FROM election_voters WHERE election_id = ?";
+
+                try (Connection conn = DatabaseConfig.getConnection();
+                     PreparedStatement ps = conn.prepareStatement(sql)) {
+
+                        ps.setString(1, electionId.trim());
+                        try (ResultSet rs = ps.executeQuery()) {
+                                if (rs.next()) {
+                                        return rs.getInt(1);
+                                }
+                        }
+                } catch (SQLException e) {
+                        System.err.println("[ElectionDAO] Error getting voter count: " + e.getMessage());
+                }
+                return 0;
+        }
+
+        // =====================================================
+        // DELETE ELECTION
+        // =====================================================
+
+        public boolean deleteElection(String electionId) throws SQLException {
+                String sql = "DELETE FROM elections WHERE election_id = ?";
+
+                try (Connection conn = DatabaseConfig.getConnection();
+                     PreparedStatement ps = conn.prepareStatement(sql)) {
+
+                        ps.setString(1, electionId.trim());
+                        return ps.executeUpdate() > 0;
+                }
+        }
+
+        // =====================================================
         // GENERATE ELECTION ID
         // =====================================================
 

@@ -55,7 +55,7 @@ public class ActiveElection {
         title.setFont(Font.font("Segoe UI", FontWeight.BOLD, 26));
 
         Text subtitle = new Text(
-                "Inspect live candidate rosters, real-time winning telemetry, and ballot standings directly from Firebase.");
+                "Inspect live candidate rosters, real-time winning telemetry, and ballot standings.");
         subtitle.setFill(Color.web(SECONDARY));
         subtitle.setFont(Font.font("Segoe UI", 13.5));
         subtitle.setWrappingWidth(920);
@@ -106,7 +106,7 @@ public class ActiveElection {
         loadingBox.setAlignment(Pos.CENTER);
         loadingBox.setPadding(new Insets(40));
         ProgressIndicator pi = new ProgressIndicator();
-        Label loadLabel = new Label("Connecting to Firebase & fetching live election telemetry...");
+        Label loadLabel = new Label("Loading live election standings & telemetry...");
         loadLabel.setStyle("-fx-text-fill: " + SECONDARY + "; -fx-font-weight: bold; -fx-font-size: 13px;");
         loadingBox.getChildren().addAll(pi, loadLabel);
         electionsList.getChildren().add(loadingBox);
@@ -262,22 +262,64 @@ public class ActiveElection {
         HBox actionButtons = new HBox(10);
         actionButtons.setAlignment(Pos.CENTER_RIGHT);
 
-        Button applyBtn = new Button("✍️ Apply as Candidate");
-        applyBtn.setStyle(
-                "-fx-background-color: #F1F5F9;" +
-                        "-fx-text-fill: #1E293B;" +
-                        "-fx-font-weight: bold;" +
-                        "-fx-font-size: 12px;" +
-                        "-fx-padding: 8 14;" +
-                        "-fx-background-radius: 8;" +
-                        "-fx-cursor: hand;" +
-                        "-fx-border-color: #CBD5E1;" +
-                        "-fx-border-radius: 8;");
-        applyBtn.setOnAction(e -> {
-            VBox formView = ApplyCandidateView.createApplyCandidateView(election.getTitle());
-            VoterDashboard.dashboardCenter.setCenter(formView);
-        });
-        com.electrovotesuperx.utils.UIAnimationHelper.addScaleHover(applyBtn, 1.04);
+        String elecStatus = election.getStatus() != null ? election.getStatus().trim() : "Draft";
+        boolean isLockedByStatus = "Active".equalsIgnoreCase(elecStatus) || "Live".equalsIgnoreCase(elecStatus) ||
+                               "Open".equalsIgnoreCase(elecStatus) || "OPEN".equalsIgnoreCase(elecStatus) ||
+                               "Closed".equalsIgnoreCase(elecStatus) || "CLOSED".equalsIgnoreCase(elecStatus) ||
+                               "Ended".equalsIgnoreCase(elecStatus);
+
+        boolean isLockedByTime = false;
+        String startStr = election.getStartDateTime();
+        if (startStr != null && !startStr.isBlank()) {
+            try {
+                java.time.format.DateTimeFormatter formatter = java.time.format.DateTimeFormatter.ofPattern("dd MMM yyyy HH:mm", java.util.Locale.ENGLISH);
+                java.time.LocalDateTime startTime = java.time.LocalDateTime.parse(startStr.trim(), formatter);
+                if (java.time.LocalDateTime.now().isAfter(startTime) || java.time.LocalDateTime.now().isEqual(startTime)) {
+                    isLockedByTime = true;
+                }
+            } catch (Exception ignored) {}
+        }
+
+        boolean isOpenOrLive = isLockedByStatus || isLockedByTime;
+
+        Button applyBtn = new Button();
+        if (isOpenOrLive) {
+            applyBtn.setText("🔒 Nominations Closed");
+            applyBtn.setTooltip(new Tooltip("Candidate nominations are closed because this election has started or is active."));
+            applyBtn.setStyle(
+                    "-fx-background-color: #F1F5F9;" +
+                            "-fx-text-fill: #94A3B8;" +
+                            "-fx-font-weight: bold;" +
+                            "-fx-font-size: 11.5px;" +
+                            "-fx-padding: 8 12;" +
+                            "-fx-background-radius: 8;" +
+                            "-fx-border-color: #E2E8F0;" +
+                            "-fx-border-radius: 8;");
+            applyBtn.setOnAction(e -> {
+                Alert alert = new Alert(Alert.AlertType.INFORMATION);
+                alert.setTitle("Candidate Nominations Closed");
+                alert.setHeaderText("Voting is Active (" + elecStatus.toUpperCase() + ")");
+                alert.setContentText("Candidate nominations are closed for '" + election.getTitle() + "' because voting is already in progress. Candidate rosters cannot be altered during active balloting.");
+                alert.showAndWait();
+            });
+        } else {
+            applyBtn.setText("✍️ Apply as Candidate");
+            applyBtn.setStyle(
+                    "-fx-background-color: #F1F5F9;" +
+                            "-fx-text-fill: #1E293B;" +
+                            "-fx-font-weight: bold;" +
+                            "-fx-font-size: 12px;" +
+                            "-fx-padding: 8 14;" +
+                            "-fx-background-radius: 8;" +
+                            "-fx-cursor: hand;" +
+                            "-fx-border-color: #CBD5E1;" +
+                            "-fx-border-radius: 8;");
+            applyBtn.setOnAction(e -> {
+                VBox formView = ApplyCandidateView.createApplyCandidateView(election.getTitle());
+                VoterDashboard.dashboardCenter.setCenter(formView);
+            });
+            com.electrovotesuperx.utils.UIAnimationHelper.addScaleHover(applyBtn, 1.04);
+        }
 
         Button voteBtn = new Button("🗳️ Cast Ballot ➔");
         voteBtn.setStyle(
@@ -397,7 +439,7 @@ public class ActiveElection {
 
         if (!anyVotesFound) {
             Label noVotesLabel = new Label(
-                    "⏳ No votes recorded yet in Firebase. Voting is currently open — cast the first ballot to start the tally!");
+                    "⏳ No votes recorded yet. Voting is currently open — cast the first ballot to start the tally!");
             noVotesLabel.setStyle("-fx-text-fill: #B45309; -fx-font-size: 12.5px; -fx-font-style: italic;");
             leadersList.getChildren().add(noVotesLabel);
         }
@@ -407,7 +449,7 @@ public class ActiveElection {
     }
 
     /**
-     * Builds the Candidate Roster section loaded directly from Firebase.
+     * Builds the Candidate Roster section.
      */
     private static VBox buildCandidatesSection(
             ElectionData election,
@@ -418,7 +460,7 @@ public class ActiveElection {
 
         HBox sectionHeader = new HBox(8);
         sectionHeader.setAlignment(Pos.CENTER_LEFT);
-        Label sectionTitle = new Label("👥 Nominated Candidates (from Firebase Database)");
+        Label sectionTitle = new Label("👥 Nominated Candidates");
         sectionTitle.setStyle("-fx-font-family: 'Segoe UI'; -fx-font-weight: bold; -fx-text-fill: " + TEXT
                 + "; -fx-font-size: 14px;");
         Label countPill = new Label(candidates.size() + " Candidate" + (candidates.size() == 1 ? "" : "s"));
@@ -435,7 +477,7 @@ public class ActiveElection {
             emptyCandBox.setStyle("-fx-background-color: #F8FAFC; -fx-background-radius: 8; -fx-border-color: " + BORDER
                     + "; -fx-border-radius: 8;");
             Label infoLabel = new Label(
-                    "ℹ️ No candidate nominations added yet for this election in Firebase. You can submit an application using the button above.");
+                    "ℹ️ No candidate nominations added yet for this election. You can submit an application using the button above.");
             infoLabel.setStyle("-fx-text-fill: " + SECONDARY + "; -fx-font-size: 12.5px;");
             emptyCandBox.getChildren().add(infoLabel);
             candidateCardsBox.getChildren().add(emptyCandBox);

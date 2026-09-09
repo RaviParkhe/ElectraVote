@@ -187,14 +187,15 @@ public class MemberDAO {
             try {
 
                 // =================================================
-                // 1. CHECK ELECTION EXISTS AND IS OPEN
+                // 1. CHECK ELECTION EXISTS AND IS IN DRAFT
+                //    (enrollment window — roll not yet frozen)
                 // =================================================
 
                 String electionCheck = """
                         SELECT COUNT(*)
                         FROM elections
                         WHERE election_id = ?
-                        AND UPPER(status) = 'OPEN'
+                        AND UPPER(status) = 'DRAFT'
                         """;
 
                 try (

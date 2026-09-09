@@ -102,8 +102,8 @@ public class OfflineElectionPage {
 
                 topBar.getChildren().add(
                                 Header.getHeader(
-                                                "Elections",
-                                                "Create and manage offline elections"));
+                                "Elections",
+                                "View elections available for voter verification"));
 
                 // =========================================================
                 // PAGE CONTENT
@@ -134,7 +134,7 @@ public class OfflineElectionPage {
                 // =========================================================
 
                 Label subtitle = new Label(
-                                "Create and manage elections available for offline voter verification.");
+                                "View elections available for offline voter verification.");
 
                 subtitle.setStyle(
                                 "-fx-font-size: 14px;" +
@@ -153,54 +153,7 @@ public class OfflineElectionPage {
                                 subtitle);
 
                 // =========================================================
-                // CREATE ELECTION BUTTON
-                // =========================================================
-
-                Button createButton = new Button(
-                                "+  Create Election");
-
-                createButton.setPrefHeight(44);
-                createButton.setPrefWidth(175);
-
-                createButton.setStyle(
-                                "-fx-background-color: #356AE6;" +
-                                                "-fx-text-fill: white;" +
-                                                "-fx-font-size: 14px;" +
-                                                "-fx-font-weight: bold;" +
-                                                "-fx-background-radius: 10px;" +
-                                                "-fx-cursor: hand;");
-
-                // =========================================================
-                // CREATE BUTTON HOVER
-                // =========================================================
-
-                createButton.setOnMouseEntered(event -> {
-
-                        createButton.setStyle(
-                                        "-fx-background-color: #2857C7;" +
-                                                        "-fx-text-fill: white;" +
-                                                        "-fx-font-size: 14px;" +
-                                                        "-fx-font-weight: bold;" +
-                                                        "-fx-background-radius: 10px;" +
-                                                        "-fx-cursor: hand;");
-                });
-
-                createButton.setOnMouseExited(event -> {
-
-                        createButton.setStyle(
-                                        "-fx-background-color: #356AE6;" +
-                                                        "-fx-text-fill: white;" +
-                                                        "-fx-font-size: 14px;" +
-                                                        "-fx-font-weight: bold;" +
-                                                        "-fx-background-radius: 10px;" +
-                                                        "-fx-cursor: hand;");
-                });
-
-                createButton.setOnAction(
-                                event -> showCreateElectionDialog());
-
-                // =========================================================
-                // TOP ACTION AREA
+                // TOP ACTION AREA (read-only for polling officer)
                 // =========================================================
 
                 HBox actionBar = new HBox();
@@ -210,18 +163,6 @@ public class OfflineElectionPage {
 
                 actionBar.getChildren().addAll(
                                 titleBox);
-
-                Region actionSpacer = new Region();
-
-                HBox.setHgrow(
-                                actionSpacer,
-                                Priority.ALWAYS);
-
-                actionBar.getChildren().add(
-                                actionSpacer);
-
-                actionBar.getChildren().add(
-                                createButton);
 
                 // =========================================================
                 // ELECTION LIST CARD
@@ -250,8 +191,6 @@ public class OfflineElectionPage {
 
                 Label statusHeader = headerLabel("Status");
 
-                Label actionHeader = headerLabel("Action");
-
                 headerRow.add(
                                 electionHeader,
                                 0,
@@ -265,11 +204,6 @@ public class OfflineElectionPage {
                 headerRow.add(
                                 statusHeader,
                                 2,
-                                0);
-
-                headerRow.add(
-                                actionHeader,
-                                3,
                                 0);
 
                 headerRow.setPadding(
@@ -510,10 +444,11 @@ public class OfflineElectionPage {
                         //
                         // =================================================
 
-                        elections.sort(
-                                        Comparator.comparing(
-                                                        election -> "CLOSED".equalsIgnoreCase(
-                                                                        election.status)));
+                        elections.sort(Comparator.comparingInt(e -> {
+                                if ("DRAFT".equalsIgnoreCase(e.status)) return 0;
+                                if ("OPEN".equalsIgnoreCase(e.status)) return 1;
+                                return 2; // CLOSED
+                        }));
 
                         // =================================================
                         // REFRESH UI
@@ -683,86 +618,8 @@ public class OfflineElectionPage {
                                 election.status);
 
                 // =========================================================
-                // ACTIONS
+                // (No actions for polling officer — admin only)
                 // =========================================================
-
-                HBox actions = new HBox(10);
-
-                actions.setAlignment(
-                                Pos.CENTER_LEFT);
-
-                // =========================================================
-                // OPEN ELECTION
-                // =========================================================
-
-                if ("OPEN".equalsIgnoreCase(
-                                election.status)) {
-
-                        Button close = new Button(
-                                        "Close Election");
-
-                        close.setPrefHeight(36);
-
-                        close.setStyle(
-                                        "-fx-background-color: #FFF1F0;" +
-                                                        "-fx-text-fill: #B42318;" +
-                                                        "-fx-font-size: 12px;" +
-                                                        "-fx-font-weight: bold;" +
-                                                        "-fx-background-radius: 8px;" +
-                                                        "-fx-border-color: #FECACA;" +
-                                                        "-fx-border-radius: 8px;" +
-                                                        "-fx-cursor: hand;");
-
-                        close.setOnMouseEntered(
-                                        event -> {
-
-                                                close.setStyle(
-                                                                "-fx-background-color: #FEE4E2;" +
-                                                                                "-fx-text-fill: #912018;" +
-                                                                                "-fx-font-size: 12px;" +
-                                                                                "-fx-font-weight: bold;" +
-                                                                                "-fx-background-radius: 8px;" +
-                                                                                "-fx-border-color: #FCA5A5;" +
-                                                                                "-fx-border-radius: 8px;" +
-                                                                                "-fx-cursor: hand;");
-                                        });
-
-                        close.setOnMouseExited(
-                                        event -> {
-
-                                                close.setStyle(
-                                                                "-fx-background-color: #FFF1F0;" +
-                                                                                "-fx-text-fill: #B42318;" +
-                                                                                "-fx-font-size: 12px;" +
-                                                                                "-fx-font-weight: bold;" +
-                                                                                "-fx-background-radius: 8px;" +
-                                                                                "-fx-border-color: #FECACA;" +
-                                                                                "-fx-border-radius: 8px;" +
-                                                                                "-fx-cursor: hand;");
-                                        });
-
-                        close.setOnAction(
-                                        event -> closeElection(election));
-
-                        actions.getChildren().add(
-                                        close);
-
-                } else {
-
-                        // =====================================================
-                        // CLOSED
-                        // =====================================================
-
-                        Label closed = new Label(
-                                        "Election Closed");
-
-                        closed.setStyle(
-                                        "-fx-font-size: 12px;" +
-                                                        "-fx-text-fill: #94A3B8;");
-
-                        actions.getChildren().add(
-                                        closed);
-                }
 
                 // =========================================================
                 // ADD CELLS
@@ -781,11 +638,6 @@ public class OfflineElectionPage {
                 grid.add(
                                 status,
                                 2,
-                                0);
-
-                grid.add(
-                                actions,
-                                3,
                                 0);
 
                 // =========================================================
@@ -830,7 +682,16 @@ public class OfflineElectionPage {
                                                 6,
                                                 12));
 
-                if ("OPEN".equalsIgnoreCase(status)) {
+                if ("DRAFT".equalsIgnoreCase(status)) {
+
+                        badge.setStyle(
+                                        "-fx-background-color: #FFFBEB;" +
+                                                        "-fx-text-fill: #92400E;" +
+                                                        "-fx-background-radius: 20px;" +
+                                                        "-fx-font-size: 11px;" +
+                                                        "-fx-font-weight: bold;");
+
+                } else if ("OPEN".equalsIgnoreCase(status)) {
 
                         badge.setStyle(
                                         "-fx-background-color: #ECFDF3;" +
@@ -1011,6 +872,84 @@ public class OfflineElectionPage {
                                                                 Alert.AlertType.ERROR,
                                                                 "Database Error",
                                                                 "Could not save election.\n\n"
+                                                                                + e.getMessage());
+                                        }
+                                });
+        }
+
+        // =============================================================
+        // OPEN ELECTION  (DRAFT → OPEN)
+        //
+        // Called when the officer clicks "Start Voting".
+        // Freezes the electoral roll and begins the voting day.
+        // =============================================================
+
+        private void openElection(
+                        ElectionData election) {
+
+                Alert confirmation = new Alert(
+                                Alert.AlertType.CONFIRMATION);
+                Navigation.attachOwner(confirmation);
+
+                confirmation.setTitle(
+                                "Start Voting");
+
+                confirmation.setHeaderText(
+                                "Freeze Roll & Start Voting?");
+
+                confirmation.setContentText(
+                                "Starting voting for:\n\n" +
+                                                election.name +
+                                                "\n\nThis will:\n" +
+                                                "  • Freeze the electoral roll (no more additions)\n" +
+                                                "  • Allow voter verification to begin\n\n" +
+                                                "This action cannot be undone.");
+
+                ButtonType startButton = new ButtonType(
+                                "Start Voting",
+                                ButtonBar.ButtonData.OK_DONE);
+
+                ButtonType cancelButton = new ButtonType(
+                                "Cancel",
+                                ButtonBar.ButtonData.CANCEL_CLOSE);
+
+                confirmation
+                                .getButtonTypes()
+                                .setAll(
+                                                startButton,
+                                                cancelButton);
+
+                confirmation
+                                .showAndWait()
+                                .ifPresent(result -> {
+
+                                        if (result != startButton) {
+                                                return;
+                                        }
+
+                                        try {
+
+                                                electionDAO.openElection(
+                                                                election.electionId);
+
+                                                loadElections();
+
+                                                showMessage(
+                                                                Alert.AlertType.INFORMATION,
+                                                                "Voting Started",
+                                                                "Election \"" +
+                                                                                election.name +
+                                                                                "\" is now OPEN.\n" +
+                                                                                "The electoral roll is frozen. Voter verification can begin.");
+
+                                        } catch (SQLException e) {
+
+                                                e.printStackTrace();
+
+                                                showMessage(
+                                                                Alert.AlertType.ERROR,
+                                                                "Database Error",
+                                                                "Could not open election.\n\n"
                                                                                 + e.getMessage());
                                         }
                                 });

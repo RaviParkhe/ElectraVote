@@ -16,6 +16,8 @@ import com.electrovotesuperx.model.OfflineModel.Voter;
 
 import com.electrovotesuperx.utils.TokenGenerator;
 
+import com.electrovotesuperx.config.SessionManager;
+
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -86,7 +88,8 @@ public class VoterVerificationService {
                         cleanVoterId,
                         cleanElectionId,
                         null,
-                        "Voter ID was not found in voters table");
+                        "Voter ID was not found in voters table",
+                        SessionManager.officerEmail);
                 return EligibilityResult.fail("Voter ID not found.");
             }
 
@@ -96,7 +99,8 @@ public class VoterVerificationService {
                         voter.getVoterId(),
                         cleanElectionId,
                         null,
-                        "Voter account is suspended");
+                        "Voter account is suspended",
+                        SessionManager.officerEmail);
                 return EligibilityResult.fail("Voter account is suspended.");
             }
 
@@ -111,7 +115,8 @@ public class VoterVerificationService {
                         voter.getVoterId(),
                         cleanElectionId,
                         null,
-                        "Voter is not registered for this election");
+                        "Voter is not registered for this election",
+                        SessionManager.officerEmail);
                 return EligibilityResult.fail("Voter is not registered for this election.");
             }
 
@@ -121,7 +126,8 @@ public class VoterVerificationService {
                         voter.getVoterId(),
                         cleanElectionId,
                         null,
-                        "Voter has already voted in this election");
+                        "Voter has already voted in this election",
+                        SessionManager.officerEmail);
                 return EligibilityResult.alreadyVoted(voter, "This voter has already voted in this election.");
             }
 
@@ -156,7 +162,8 @@ public class VoterVerificationService {
                         voter.getVoterId(),
                         cleanElectionId,
                         existing.getToken(),
-                        "Existing active token returned after " + authMethod + " verification");
+                        "Existing active token returned after " + authMethod + " verification",
+                        SessionManager.officerEmail);
 
                 return VerificationResult.success(
                         voter,
@@ -173,7 +180,8 @@ public class VoterVerificationService {
                     voter.getVoterId(),
                     cleanElectionId,
                     token,
-                    "Voter verified via " + authMethod + " and authorization token generated");
+                    "Voter verified via " + authMethod + " and authorization token generated",
+                    SessionManager.officerEmail);
 
             return VerificationResult.success(
                     voter,

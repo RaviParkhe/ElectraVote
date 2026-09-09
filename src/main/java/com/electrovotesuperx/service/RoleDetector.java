@@ -38,16 +38,6 @@ public class RoleDetector {
         return detectRole(uid, email, idToken, null);
     }
 
-    /**
-     * Looks up Firestore Organizations, Users/{uid}, and RTDB records.
-     * Prioritizes the chosen role from the UI if specified.
-     *
-     * @param uid           Firebase Auth localId
-     * @param email         Authenticated email
-     * @param idToken       Firebase Auth idToken
-     * @param preferredRole Selected role from UI ("admin", "voter", "offline", "new_user")
-     * @return RoleResult.ADMIN, RoleResult.POLLING_OFFICER, RoleResult.VOTER, or RoleResult.UNKNOWN
-     */
     public static RoleResult detectRole(
             String uid,
             String email,

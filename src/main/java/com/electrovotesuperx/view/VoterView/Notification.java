@@ -135,9 +135,9 @@ public class Notification {
                                 cards.add(createNotificationCard(
                                         org,
                                         "🏆 Election Winner / Leading Notice: " + elec.getTitle(),
-                                        "Official live tally update from Firebase for election '" + elec.getTitle() + "':\n\n"
+                                        "Official live tally update for election '" + elec.getTitle() + "':\n\n"
                                                 + winnerSummary.toString().trim()
-                                                + "\n\nTotal ballots recorded in Firebase: " + totalElectionVotes + " votes.",
+                                                + "\n\nTotal ballots recorded: " + totalElectionVotes + " votes.",
                                         "👑 Live Winner",
                                         GOLD
                                 ));

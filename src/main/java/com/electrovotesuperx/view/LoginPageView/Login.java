@@ -10,8 +10,10 @@ import com.electrovotesuperx.service.RoleDetector;
 import com.electrovotesuperx.utils.Navigation;
 import com.electrovotesuperx.view.Page;
 import com.electrovotesuperx.view.AdminView.AdminDashboard;
-import com.electrovotesuperx.view.HomePageView.HomePage;
+import com.electrovotesuperx.view.OfflineView.OfflineAdminDashboard;
 import com.electrovotesuperx.view.OfflineView.OfflineHomePage;
+import com.electrovotesuperx.view.OfflineView.PollingOfficerGatewayDialog;
+import com.electrovotesuperx.view.OrganizationView.OrganizationPortal;
 import com.electrovotesuperx.view.VoterView.VoterDashboard;
 
 import javafx.animation.FadeTransition;
@@ -29,6 +31,7 @@ import java.time.LocalDate;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.layout.HBox;
+import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
@@ -42,6 +45,25 @@ public class Login implements Page {
     public static Stage loginStage;
 
     private Scene loginScene;
+
+    // =========================================
+    // SHARED STYLE CONSTANTS
+    // =========================================
+
+    private static final String FIELD_STYLE =
+            "-fx-background-color: rgba(255,255,255,0.10);" +
+            "-fx-border-color: rgba(255,255,255,0.35);" +
+            "-fx-border-radius: 12;" +
+            "-fx-background-radius: 12;" +
+            "-fx-text-fill: white;" +
+            "-fx-prompt-text-fill: rgba(255,255,255,0.55);" +
+            "-fx-font-size: 14px;" +
+            "-fx-padding: 10 14;";
+
+    private static final String EYE_BTN_STYLE =
+            "-fx-background-color: transparent;" +
+            "-fx-cursor: hand;" +
+            "-fx-padding: 2 6;";
 
     // =========================================
     // GET SCENE
@@ -59,7 +81,7 @@ public class Login implements Page {
         try {
             loginImage = new Image(
                     getClass().getResourceAsStream(
-                            "/assests/images/login_image.jpeg"));
+                            "/assests/images/login_image.png"));
         } catch (Exception e) {
             // Image not found — continue without it
         }
@@ -78,37 +100,35 @@ public class Login implements Page {
         // =========================================
 
         Region signUpLine = new Region();
-        signUpLine.setPrefWidth(90);
         signUpLine.setPrefHeight(3);
-        signUpLine.setStyle("-fx-background-color: #2563EB");
+        signUpLine.setStyle("-fx-background-color: white; -fx-background-radius: 2;");
 
         Region signInLine = new Region();
-        signInLine.setPrefWidth(90);
         signInLine.setPrefHeight(3);
-        signInLine.setStyle("-fx-background-color: #2563EB");
+        signInLine.setStyle("-fx-background-color: white; -fx-background-radius: 2;");
         signInLine.setVisible(false);
 
         Label signUpLabel = new Label("Sign Up");
         signUpLabel.setStyle(
-                "-fx-font-size: 25;" +
-                        "-fx-font-weight: bold;" +
-                        "-fx-text-fill: #172554;" +
-                        "-fx-cursor: hand;");
+                "-fx-font-size: 20;" +
+                "-fx-font-weight: bold;" +
+                "-fx-text-fill: white;" +
+                "-fx-cursor: hand;");
 
         Label signInLabel = new Label("Sign In");
         signInLabel.setStyle(
-                "-fx-font-size: 25;" +
-                        "-fx-font-weight: bold;" +
-                        "-fx-text-fill: #172554;" +
-                        "-fx-cursor: hand;");
+                "-fx-font-size: 20;" +
+                "-fx-font-weight: bold;" +
+                "-fx-text-fill: rgba(255,255,255,0.65);" +
+                "-fx-cursor: hand;");
 
-        VBox signUpTab = new VBox(5, signUpLabel, signUpLine);
+        VBox signUpTab = new VBox(6, signUpLabel, signUpLine);
         signUpTab.setAlignment(Pos.CENTER);
 
-        VBox signInTab = new VBox(5, signInLabel, signInLine);
+        VBox signInTab = new VBox(6, signInLabel, signInLine);
         signInTab.setAlignment(Pos.CENTER);
 
-        HBox tabsBox = new HBox(100, signUpTab, signInTab);
+        HBox tabsBox = new HBox(60, signUpTab, signInTab);
         tabsBox.setAlignment(Pos.CENTER);
 
         // =========================================
@@ -117,25 +137,25 @@ public class Login implements Page {
 
         TextField name = new TextField();
         name.setPromptText("Full Name");
-        name.setPrefWidth(500);
-        name.setPrefHeight(40);
-        name.setStyle("-fx-background-radius: 20;");
+        name.setStyle(FIELD_STYLE);
+        name.setMaxWidth(Double.MAX_VALUE);
 
         TextField signUpEmail = new TextField();
         signUpEmail.setPromptText("Email Address");
-        signUpEmail.setPrefWidth(500);
-        signUpEmail.setPrefHeight(40);
-        signUpEmail.setStyle("-fx-background-radius: 20;");
+        signUpEmail.setStyle(FIELD_STYLE);
+        signUpEmail.setMaxWidth(Double.MAX_VALUE);
 
         DatePicker datePicker = new DatePicker();
         datePicker.setPromptText("Date of Birth (18+ years)");
-        datePicker.setPrefWidth(500);
-        datePicker.setPrefHeight(40);
+        datePicker.setMaxWidth(Double.MAX_VALUE);
         datePicker.setStyle(
-                "-fx-background-color: white;" +
-                        "-fx-border-color: #cccccc;" +
-                        "-fx-border-radius: 20;" +
-                        "-fx-background-radius: 20;");
+                "-fx-background-color: rgba(255,255,255,0.10);" +
+                "-fx-border-color: rgba(255,255,255,0.35);" +
+                "-fx-border-radius: 12;" +
+                "-fx-background-radius: 12;" +
+                "-fx-text-fill: white;" +
+                "-fx-prompt-text-fill: rgba(255,255,255,0.55);" +
+                "-fx-font-size: 14px;");
 
         // Restrict DatePicker calendar to only allow selection of dates for users 18
         // years or older
@@ -151,31 +171,12 @@ public class Login implements Page {
             }
         });
 
-        PasswordField signUpPassword = new PasswordField();
-        signUpPassword.setPromptText("Password");
-        signUpPassword.setPrefWidth(500);
-        signUpPassword.setPrefHeight(40);
-        signUpPassword.setStyle("-fx-background-radius: 20;");
+        // Sign-Up password with eye toggle
+        HBox signUpPasswordRow = buildPasswordRow("Password");
+        PasswordField signUpPassword = (PasswordField) signUpPasswordRow.getChildren().get(0);
+        TextField signUpPasswordVisible = (TextField) signUpPasswordRow.getChildren().get(1);
 
-        Button signUpSubmitBtn = new Button("Submit");
-        signUpSubmitBtn.setStyle(
-                "-fx-background-color: #2563EB;" +
-                        "-fx-text-fill: white;" +
-                        "-fx-font-size: 16px;" +
-                        "-fx-font-weight: bold;" +
-                        "-fx-background-radius: 20;");
-        signUpSubmitBtn.setPrefWidth(500);
-        signUpSubmitBtn.setPrefHeight(40);
-
-        signUpSubmitBtn.setOnMouseEntered(e -> {
-            signUpSubmitBtn.setScaleX(1.05);
-            signUpSubmitBtn.setScaleY(1.05);
-        });
-
-        signUpSubmitBtn.setOnMouseExited(e -> {
-            signUpSubmitBtn.setScaleX(1);
-            signUpSubmitBtn.setScaleY(1);
-        });
+        Button signUpSubmitBtn = buildSubmitButton("Create Account");
 
         // =========================================
         // SIGN IN FIELDS
@@ -183,15 +184,13 @@ public class Login implements Page {
 
         TextField signInEmail = new TextField();
         signInEmail.setPromptText("Email Address");
-        signInEmail.setPrefWidth(500);
-        signInEmail.setPrefHeight(40);
-        signInEmail.setStyle("-fx-background-radius: 20;");
+        signInEmail.setStyle(FIELD_STYLE);
+        signInEmail.setMaxWidth(Double.MAX_VALUE);
 
-        PasswordField signInPassword = new PasswordField();
-        signInPassword.setPromptText("Password");
-        signInPassword.setPrefWidth(500);
-        signInPassword.setPrefHeight(40);
-        signInPassword.setStyle("-fx-background-radius: 20;");
+        // Sign-In password with eye toggle
+        HBox signInPasswordRow = buildPasswordRow("Password");
+        PasswordField signInPassword = (PasswordField) signInPasswordRow.getChildren().get(0);
+        TextField signInPasswordVisible = (TextField) signInPasswordRow.getChildren().get(1);
 
         // =========================================
         // ROLE SELECTOR
@@ -199,77 +198,84 @@ public class Login implements Page {
 
         final String[] selectedRole = { "admin" };
 
-        String roleBtnDefault = "-fx-background-color: #F1F5F9;" +
-                "-fx-text-fill: #475569;" +
-                "-fx-font-size: 13px;" +
+        String roleBtnDefault =
+                "-fx-background-color: rgba(255,255,255,0.15);" +
+                "-fx-text-fill: rgba(255,255,255,0.80);" +
+                "-fx-font-size: 12px;" +
                 "-fx-font-weight: bold;" +
-                "-fx-background-radius: 12;" +
+                "-fx-background-radius: 10;" +
                 "-fx-cursor: hand;" +
-                "-fx-padding: 8 16;";
+                "-fx-padding: 7 14;";
 
-        String roleBtnActiveAdmin = "-fx-background-color: #2563EB;" +
+        String roleBtnActiveAdmin =
+                "-fx-background-color: #2563EB;" +
                 "-fx-text-fill: white;" +
-                "-fx-font-size: 13px;" +
+                "-fx-font-size: 12px;" +
                 "-fx-font-weight: bold;" +
-                "-fx-background-radius: 12;" +
+                "-fx-background-radius: 10;" +
                 "-fx-cursor: hand;" +
-                "-fx-padding: 8 16;";
+                "-fx-padding: 7 14;";
 
-        String roleBtnActiveVoter = "-fx-background-color: #7C3AED;" +
+        String roleBtnActiveVoter =
+                "-fx-background-color: #7C3AED;" +
                 "-fx-text-fill: white;" +
-                "-fx-font-size: 13px;" +
+                "-fx-font-size: 12px;" +
                 "-fx-font-weight: bold;" +
-                "-fx-background-radius: 12;" +
+                "-fx-background-radius: 10;" +
                 "-fx-cursor: hand;" +
-                "-fx-padding: 8 16;";
+                "-fx-padding: 7 14;";
 
-        String roleBtnActiveOffline = "-fx-background-color: #059669;" +
+        String roleBtnActiveOffline =
+                "-fx-background-color: #059669;" +
                 "-fx-text-fill: white;" +
-                "-fx-font-size: 13px;" +
+                "-fx-font-size: 12px;" +
                 "-fx-font-weight: bold;" +
-                "-fx-background-radius: 12;" +
+                "-fx-background-radius: 10;" +
                 "-fx-cursor: hand;" +
-                "-fx-padding: 8 16;";
+                "-fx-padding: 7 14;";
 
-        String roleBtnActiveNewUser = "-fx-background-color: #EA580C;" +
+        String roleBtnActiveOfflineAdmin =
+                "-fx-background-color: #4F46E5;" +
                 "-fx-text-fill: white;" +
-                "-fx-font-size: 13px;" +
+                "-fx-font-size: 12px;" +
                 "-fx-font-weight: bold;" +
-                "-fx-background-radius: 12;" +
+                "-fx-background-radius: 10;" +
                 "-fx-cursor: hand;" +
-                "-fx-padding: 8 16;";
+                "-fx-padding: 7 14;";
 
-        Button adminRoleBtn = new Button("🏛  Admin");
+        String roleBtnActiveNewUser =
+                "-fx-background-color: #EA580C;" +
+                "-fx-text-fill: white;" +
+                "-fx-font-size: 12px;" +
+                "-fx-font-weight: bold;" +
+                "-fx-background-radius: 10;" +
+                "-fx-cursor: hand;" +
+                "-fx-padding: 7 14;";
+
+        Button adminRoleBtn        = new Button("🏛  Admin");
+        Button voterRoleBtn        = new Button("🗳  Voter");
+        Button offlineRoleBtn      = new Button("🔒  Offline");
+        Button offlineAdminRoleBtn = new Button("⚡  Offline Admin");
+        Button newUserRoleBtn      = new Button("✨  New User");
+
         adminRoleBtn.setStyle(roleBtnActiveAdmin);
-        adminRoleBtn.setPrefWidth(115);
-        adminRoleBtn.setPrefHeight(36);
-
-        Button voterRoleBtn = new Button("🗳  Voter");
         voterRoleBtn.setStyle(roleBtnDefault);
-        voterRoleBtn.setPrefWidth(115);
-        voterRoleBtn.setPrefHeight(36);
-
-        Button offlineRoleBtn = new Button("🔒  Offline");
         offlineRoleBtn.setStyle(roleBtnDefault);
-        offlineRoleBtn.setPrefWidth(115);
-        offlineRoleBtn.setPrefHeight(36);
-
-        Button newUserRoleBtn = new Button("✨  New User");
+        offlineAdminRoleBtn.setStyle(roleBtnDefault);
         newUserRoleBtn.setStyle(roleBtnDefault);
-        newUserRoleBtn.setPrefWidth(115);
-        newUserRoleBtn.setPrefHeight(36);
 
         Label roleLabel = new Label("Select Your Role");
         roleLabel.setStyle(
                 "-fx-font-size: 13px;" +
-                        "-fx-font-weight: bold;" +
-                        "-fx-text-fill: #172554;");
+                "-fx-font-weight: bold;" +
+                "-fx-text-fill: rgba(255,255,255,0.85);");
 
-        HBox roleButtons = new HBox(8,
-                adminRoleBtn, voterRoleBtn, offlineRoleBtn, newUserRoleBtn);
-        roleButtons.setAlignment(Pos.CENTER);
+        HBox roleButtonsRow1 = new HBox(8, adminRoleBtn, voterRoleBtn, offlineRoleBtn);
+        roleButtonsRow1.setAlignment(Pos.CENTER);
+        HBox roleButtonsRow2 = new HBox(8, offlineAdminRoleBtn, newUserRoleBtn);
+        roleButtonsRow2.setAlignment(Pos.CENTER);
 
-        VBox roleSelector = new VBox(8, roleLabel, roleButtons);
+        VBox roleSelector = new VBox(8, roleLabel, roleButtonsRow1, roleButtonsRow2);
         roleSelector.setAlignment(Pos.CENTER);
 
         // Role selector click handlers
@@ -279,6 +285,7 @@ public class Login implements Page {
             adminRoleBtn.setStyle(roleBtnActiveAdmin);
             voterRoleBtn.setStyle(roleBtnDefault);
             offlineRoleBtn.setStyle(roleBtnDefault);
+            offlineAdminRoleBtn.setStyle(roleBtnDefault);
             newUserRoleBtn.setStyle(roleBtnDefault);
             signInEmail.setDisable(false);
             signInPassword.setDisable(false);
@@ -289,6 +296,7 @@ public class Login implements Page {
             adminRoleBtn.setStyle(roleBtnDefault);
             voterRoleBtn.setStyle(roleBtnActiveVoter);
             offlineRoleBtn.setStyle(roleBtnDefault);
+            offlineAdminRoleBtn.setStyle(roleBtnDefault);
             newUserRoleBtn.setStyle(roleBtnDefault);
             signInEmail.setDisable(false);
             signInPassword.setDisable(false);
@@ -299,6 +307,23 @@ public class Login implements Page {
             adminRoleBtn.setStyle(roleBtnDefault);
             voterRoleBtn.setStyle(roleBtnDefault);
             offlineRoleBtn.setStyle(roleBtnActiveOffline);
+            offlineAdminRoleBtn.setStyle(roleBtnDefault);
+            newUserRoleBtn.setStyle(roleBtnDefault);
+            signInEmail.setDisable(false);
+            signInPassword.setDisable(false);
+
+            Stage targetStage = loginStage != null ? loginStage : (Stage) offlineRoleBtn.getScene().getWindow();
+            String curEmail = signInEmail.getText().trim();
+            String curPass = signInPassword.isVisible() ? signInPassword.getText() : signInPasswordVisible.getText();
+            PollingOfficerGatewayDialog.show(targetStage, curEmail, curPass);
+        });
+
+        offlineAdminRoleBtn.setOnAction(e -> {
+            selectedRole[0] = "offlineAdmin";
+            adminRoleBtn.setStyle(roleBtnDefault);
+            voterRoleBtn.setStyle(roleBtnDefault);
+            offlineRoleBtn.setStyle(roleBtnDefault);
+            offlineAdminRoleBtn.setStyle(roleBtnActiveOfflineAdmin);
             newUserRoleBtn.setStyle(roleBtnDefault);
             signInEmail.setDisable(false);
             signInPassword.setDisable(false);
@@ -309,6 +334,7 @@ public class Login implements Page {
             adminRoleBtn.setStyle(roleBtnDefault);
             voterRoleBtn.setStyle(roleBtnDefault);
             offlineRoleBtn.setStyle(roleBtnDefault);
+            offlineAdminRoleBtn.setStyle(roleBtnDefault);
             newUserRoleBtn.setStyle(roleBtnActiveNewUser);
             signInEmail.setDisable(false);
             signInPassword.setDisable(false);
@@ -318,63 +344,42 @@ public class Login implements Page {
         // SIGN IN SUBMIT BUTTON
         // =========================================
 
-        Button signInSubmitBtn = new Button("Submit");
-        signInSubmitBtn.setStyle(
-                "-fx-background-color: #2563EB;" +
-                        "-fx-text-fill: white;" +
-                        "-fx-font-size: 16px;" +
-                        "-fx-font-weight: bold;" +
-                        "-fx-background-radius: 20;");
-        signInSubmitBtn.setPrefWidth(500);
-        signInSubmitBtn.setPrefHeight(40);
-
-        signInSubmitBtn.setOnMouseEntered(e -> {
-            signInSubmitBtn.setScaleX(1.05);
-            signInSubmitBtn.setScaleY(1.05);
-        });
-
-        signInSubmitBtn.setOnMouseExited(e -> {
-            signInSubmitBtn.setScaleX(1);
-            signInSubmitBtn.setScaleY(1);
-        });
+        Button signInSubmitBtn = buildSubmitButton("Sign In");
 
         // =========================================
         // OUTPUT MESSAGE
         // =========================================
 
         Text output = new Text();
-        output.setStyle("-fx-font-size: 14;");
+        output.setStyle("-fx-font-size: 13;");
+        output.setFill(Color.WHITE);
 
         // =========================================
         // SIGN UP FORM
         // =========================================
 
-        VBox signUpBox = new VBox(50,
+        VBox signUpBox = new VBox(18,
                 name, signUpEmail, datePicker,
-                signUpPassword, signUpSubmitBtn);
-        signUpBox.setFillWidth(false);
+                signUpPasswordRow, signUpSubmitBtn);
+        signUpBox.setFillWidth(true);
         signUpBox.setAlignment(Pos.CENTER);
 
         // =========================================
         // SIGN IN FORM
         // =========================================
 
-        VBox signInBox = new VBox(25,
-                signInEmail, signInPassword,
+        VBox signInBox = new VBox(18,
+                signInEmail, signInPasswordRow,
                 roleSelector, signInSubmitBtn);
-        signInBox.setFillWidth(false);
+        signInBox.setFillWidth(true);
         signInBox.setAlignment(Pos.CENTER);
         signInBox.setVisible(false);
 
         // =========================================
-        // FORM AREA
+        // FORM AREA (StackPane for overlay transition)
         // =========================================
 
-        StackPane formArea = new StackPane();
-        formArea.setPrefHeight(450);
-        formArea.setMinHeight(450);
-        formArea.setMaxHeight(450);
-        formArea.getChildren().addAll(signUpBox, signInBox);
+        StackPane formArea = new StackPane(signUpBox, signInBox);
 
         // =========================================
         // SIGN UP ACTION
@@ -382,12 +387,16 @@ public class Login implements Page {
 
         signUpSubmitBtn.setOnAction(e -> {
 
+            String passText = signUpPassword.isVisible()
+                    ? signUpPassword.getText()
+                    : signUpPasswordVisible.getText();
+
             if (name.getText().isEmpty()
                     || signUpEmail.getText().isEmpty()
                     || datePicker.getValue() == null
-                    || signUpPassword.getText().isEmpty()) {
+                    || passText.isEmpty()) {
 
-                output.setFill(Color.RED);
+                output.setFill(Color.web("#FCA5A5"));
                 output.setText("Please fill all fields.");
                 shakeButton(signUpSubmitBtn);
                 return;
@@ -396,30 +405,31 @@ public class Login implements Page {
             LocalDate dob = datePicker.getValue();
             LocalDate maxDob = LocalDate.now().minusYears(18);
             if (dob.isAfter(maxDob)) {
-                output.setFill(Color.RED);
+                output.setFill(Color.web("#FCA5A5"));
                 output.setText("You must be at least 18 years old to register.");
                 shakeButton(signUpSubmitBtn);
                 return;
             }
 
             if (dob.isBefore(LocalDate.now().minusYears(120))) {
-                output.setFill(Color.RED);
+                output.setFill(Color.web("#FCA5A5"));
                 output.setText("Please select a valid Date of Birth.");
                 shakeButton(signUpSubmitBtn);
                 return;
             }
 
             signUpSubmitBtn.setDisable(true);
-            output.setFill(Color.web("#2563EB"));
+            output.setFill(Color.web("#93C5FD"));
             output.setText("Creating account...");
 
+            String finalPass = passText;
             new Thread(() -> {
 
                 try {
 
                     FirebaseAuthService.AuthResult result = FirebaseAuthService.createUser(
                             signUpEmail.getText().trim(),
-                            signUpPassword.getText());
+                            finalPass);
 
                     javafx.application.Platform.runLater(() -> {
 
@@ -444,14 +454,14 @@ public class Login implements Page {
                                 }
                             }).start();
 
-                            output.setFill(Color.web("#059669"));
+                            output.setFill(Color.web("#6EE7B7"));
                             output.setText(
                                     "Account created successfully! " +
                                             "Switch to Sign In.");
 
                         } else {
 
-                            output.setFill(Color.RED);
+                            output.setFill(Color.web("#FCA5A5"));
                             output.setText(result.getMessage());
                         }
                     });
@@ -461,7 +471,7 @@ public class Login implements Page {
                     javafx.application.Platform.runLater(() -> {
 
                         signUpSubmitBtn.setDisable(false);
-                        output.setFill(Color.RED);
+                        output.setFill(Color.web("#FCA5A5"));
                         output.setText(ex.getMessage());
                     });
                 }
@@ -477,35 +487,63 @@ public class Login implements Page {
 
             String chosenRole = selectedRole[0];
 
-            // ─── All roles (Admin / Voter / Offline / New User) require email + password
-            // ───
+            String passText = signInPassword.isVisible()
+                    ? signInPassword.getText()
+                    : signInPasswordVisible.getText();
 
-            if (signInEmail.getText().isEmpty()
-                    || signInPassword.getText().isEmpty()) {
+            if (signInEmail.getText().isEmpty() || passText.isEmpty()) {
 
-                output.setFill(Color.RED);
+                output.setFill(Color.web("#FCA5A5"));
                 output.setText("Please fill all fields.");
                 shakeButton(signInSubmitBtn);
                 return;
             }
 
+            // Exclusive validation for Offline Admin role
+            if ("offlineAdmin".equals(chosenRole)) {
+                if (!"ravi.parkhe2006@gmail.com".equalsIgnoreCase(signInEmail.getText().trim())) {
+                    output.setFill(Color.web("#FCA5A5"));
+                    output.setText("Access denied: Offline Admin portal is restricted exclusively to Admin Email.");
+                    shakeButton(signInSubmitBtn);
+                    return;
+                }
+
+                // Authorized Offline Admin → Direct Access to OfflineAdminDashboard
+                SessionManager.adminEmail = "ravi.parkhe2006@gmail.com";
+                SessionManager.loggedInEmail = "ravi.parkhe2006@gmail.com";
+                SessionManager.currentRole = "offline_admin";
+                Navigation.init(loginStage);
+                OfflineAdminDashboard offlineAdminDashboard = new OfflineAdminDashboard();
+                loginStage.setScene(offlineAdminDashboard.getScene());
+                loginStage.setMaximized(true);
+                return;
+            }
+
+            // Offline Role (Polling Officer) → Open Polling Officer Verification Gateway
+            if ("offline".equals(chosenRole)) {
+                Stage targetStage = loginStage != null ? loginStage : (Stage) signInSubmitBtn.getScene().getWindow();
+                PollingOfficerGatewayDialog.show(targetStage, signInEmail.getText().trim(), passText);
+                return;
+            }
+
             signInSubmitBtn.setDisable(true);
-            output.setFill(Color.web("#2563EB"));
+            output.setFill(Color.web("#93C5FD"));
             output.setText("Signing in...");
 
+            String finalPass = passText;
             new Thread(() -> {
 
                 try {
 
                     FirebaseAuthService.AuthResult result = FirebaseAuthService.signIn(
                             signInEmail.getText().trim(),
-                            signInPassword.getText());
+                            finalPass);
 
                     if (!result.isSuccess()) {
 
                         javafx.application.Platform.runLater(() -> {
                             signInSubmitBtn.setDisable(false);
-                            output.setFill(Color.RED);
+                            output.setFill(Color.web("#FCA5A5"));
                             output.setText(result.getMessage());
                         });
                         return;
@@ -519,7 +557,7 @@ public class Login implements Page {
                     // ─── Role Verification ───
 
                     javafx.application.Platform.runLater(() -> {
-                        output.setFill(Color.web("#2563EB"));
+                        output.setFill(Color.web("#93C5FD"));
                         output.setText("Verifying authorization...");
                     });
 
@@ -543,7 +581,7 @@ public class Login implements Page {
 
                             } else {
 
-                                output.setFill(Color.RED);
+                                output.setFill(Color.web("#FCA5A5"));
                                 output.setText(
                                         "Access denied. You are not registered " +
                                                 "as an admin. Please register your " +
@@ -572,24 +610,24 @@ public class Login implements Page {
                                     VoterDashboard voterDashboard = new VoterDashboard();
                                     voterDashboard.start(loginStage);
                                 } else if ("REJECTED".equalsIgnoreCase(vStatus)) {
-                                    output.setFill(Color.RED);
+                                    output.setFill(Color.web("#FCA5A5"));
                                     output.setText(
                                             "Access denied: Your voter registration for '"
                                                     + (SessionManager.organizationName != null ? SessionManager.organizationName : SessionManager.joinCode)
                                                     + "' was rejected by the administrator.");
                                     shakeButton(signInSubmitBtn);
                                 } else {
-                                    output.setFill(Color.web("#d97706"));
+                                    output.setFill(Color.web("#FCD34D"));
                                     output.setText(
                                             "⏳ Access denied: Your voter registration for '"
                                                     + (SessionManager.organizationName != null ? SessionManager.organizationName : SessionManager.joinCode)
-                                                    + "' is awaiting approval by the Organization Administrator.");
+                                                    + "' is awaiting approval.");
                                     shakeButton(signInSubmitBtn);
                                 }
 
                             } else {
 
-                                output.setFill(Color.RED);
+                                output.setFill(Color.web("#FCA5A5"));
                                 output.setText(
                                         "Access denied. You are not registered " +
                                                 "as a voter. Please sign up through " +
@@ -600,7 +638,7 @@ public class Login implements Page {
                         } else if ("offline".equals(chosenRole)) {
 
                             OfficerApprovalStatus status = PollingOfficerService.checkOfficerApprovalStatus(
-                                    result.getLocalId(),
+                                     result.getLocalId(),
                                     result.getEmail(),
                                     result.getIdToken());
 
@@ -612,34 +650,53 @@ public class Login implements Page {
                                 loginStage.setScene(offline.getScene());
                                 loginStage.setMaximized(true);
                             } else if (status == OfficerApprovalStatus.PENDING) {
-                                output.setFill(Color.web("#d97706"));
+                                output.setFill(Color.web("#FCD34D"));
                                 output.setText(
                                         "Access denied: Your Polling Officer registration is awaiting approval by "
                                                 + PollingOfficerService.CHIEF_APPROVER_EMAIL + ".");
                                 shakeButton(signInSubmitBtn);
                             } else if (status == OfficerApprovalStatus.REJECTED) {
-                                output.setFill(Color.RED);
+                                output.setFill(Color.web("#FCA5A5"));
                                 output.setText(
                                         "Access denied: Your Polling Officer registration was rejected.");
                                 shakeButton(signInSubmitBtn);
                             } else {
-                                output.setFill(Color.RED);
+                                output.setFill(Color.web("#FCA5A5"));
                                 output.setText(
                                         "Access denied. Offline Voting Portal is restricted exclusively to authorized Polling Officers. Please register first.");
                                 shakeButton(signInSubmitBtn);
                             }
 
+                        } else if ("offlineAdmin".equals(chosenRole)) {
+
+                            String authedEmail = result.getEmail() != null ? result.getEmail() : signInEmail.getText().trim();
+                            if (!"ravi.parkhe2006@gmail.com".equalsIgnoreCase(authedEmail)) {
+                                output.setFill(Color.web("#FCA5A5"));
+                                output.setText("Access denied: Offline Admin is restricted exclusively to ravi.parkhe2006@gmail.com.");
+                                shakeButton(signInSubmitBtn);
+                                return;
+                            }
+
+                            SessionManager.idToken = result.getIdToken();
+                            SessionManager.adminEmail = "ravi.parkhe2006@gmail.com";
+                            SessionManager.loggedInEmail = "ravi.parkhe2006@gmail.com";
+                            SessionManager.currentRole = "offline_admin";
+                            Navigation.init(loginStage);
+                            OfflineAdminDashboard offlineAdminDashboard = new OfflineAdminDashboard();
+                            loginStage.setScene(offlineAdminDashboard.getScene());
+                            loginStage.setMaximized(true);
+
                         } else {
 
-                            // New User mode → HomePage (Home Portal)
+                            // New User mode → Direct access to Organization Portal
                             SessionManager.idToken = result.getIdToken();
                             SessionManager.loggedInEmail = result.getEmail() != null
-                                    ? result.getEmail()
-                                    : signInEmail.getText().trim();
+                                     ? result.getEmail()
+                                     : signInEmail.getText().trim();
 
-                            HomePage homepage = new HomePage(loginStage);
+                            OrganizationPortal portal = new OrganizationPortal(loginStage);
                             loginStage.setScene(
-                                    homepage.getScene(() -> {
+                                    portal.getScene(() -> {
                                         SessionManager.clear();
                                         loginStage.setScene(loginScene);
                                         loginStage.setMaximized(true);
@@ -653,7 +710,7 @@ public class Login implements Page {
                     javafx.application.Platform.runLater(() -> {
 
                         signInSubmitBtn.setDisable(false);
-                        output.setFill(Color.RED);
+                        output.setFill(Color.web("#FCA5A5"));
                         output.setText(ex.getMessage());
                     });
                 }
@@ -674,6 +731,9 @@ public class Login implements Page {
 
             signUpLine.setVisible(true);
             signInLine.setVisible(false);
+
+            signUpLabel.setStyle("-fx-font-size: 20; -fx-font-weight: bold; -fx-text-fill: white; -fx-cursor: hand;");
+            signInLabel.setStyle("-fx-font-size: 20; -fx-font-weight: bold; -fx-text-fill: rgba(255,255,255,0.65); -fx-cursor: hand;");
 
             FadeTransition fade = new FadeTransition(
                     Duration.millis(300), signUpBox);
@@ -702,6 +762,9 @@ public class Login implements Page {
             signUpLine.setVisible(false);
             signInLine.setVisible(true);
 
+            signInLabel.setStyle("-fx-font-size: 20; -fx-font-weight: bold; -fx-text-fill: white; -fx-cursor: hand;");
+            signUpLabel.setStyle("-fx-font-size: 20; -fx-font-weight: bold; -fx-text-fill: rgba(255,255,255,0.65); -fx-cursor: hand;");
+
             FadeTransition fade = new FadeTransition(
                     Duration.millis(300), signInBox);
             fade.setFromValue(0);
@@ -716,52 +779,65 @@ public class Login implements Page {
         });
 
         // =========================================
-        // FORM CARD
+        // FORM CARD  (glassmorphism dark panel)
         // =========================================
 
-        VBox formBox = new VBox(30,
-                tabsBox, formArea, output);
+        VBox formBox = new VBox(22, tabsBox, formArea, output);
         formBox.setAlignment(Pos.CENTER);
-        formBox.setMaxWidth(520);
-        formBox.setPrefHeight(700);
+        formBox.setFillWidth(true);
         formBox.setStyle(
-                "-fx-background-color: rgba(255,255,255,0.94);" +
-                        "-fx-background-radius: 25;" +
-                        "-fx-padding: 30;" +
-                        "-fx-effect: dropshadow(gaussian, " +
-                        "rgba(0,0,0,0.20), 20, 0, 0, 5);");
+                "-fx-background-color: rgba(10,20,50,0.65);" +
+                "-fx-background-radius: 22;" +
+                "-fx-border-color: rgba(255,255,255,0.18);" +
+                "-fx-border-radius: 22;" +
+                "-fx-border-width: 1;" +
+                "-fx-padding: 35 40;" +
+                "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.50), 30, 0, 0, 8);");
+
+        // Responsive: min 360, preferred 460, max 520
+        formBox.setMinWidth(360);
+        formBox.setPrefWidth(460);
+        formBox.setMaxWidth(520);
 
         // =========================================
-        // ROOT
+        // ROOT — image fills entire background
         // =========================================
 
         StackPane root = new StackPane();
 
         if (loginImage != null && !loginImage.isError()) {
-
-            // Bind image to fill the window
-            imageView.fitWidthProperty().bind(
-                    root.widthProperty());
-            imageView.fitHeightProperty().bind(
-                    root.heightProperty());
-
+            imageView.fitWidthProperty().bind(root.widthProperty());
+            imageView.fitHeightProperty().bind(root.heightProperty());
             root.getChildren().add(imageView);
         } else {
-
-            root.setStyle(
-                    "-fx-background-color: #F5F7FB;");
+            root.setStyle("-fx-background-color: #0A1432;");
         }
 
-        root.getChildren().add(formBox);
+        // Subtle overlay to improve card readability
+        Region overlay = new Region();
+        overlay.setStyle("-fx-background-color: rgba(0,0,10,0.38);");
+        overlay.setMouseTransparent(true);
+
+        root.getChildren().addAll(overlay, formBox);
         StackPane.setAlignment(formBox, Pos.CENTER_RIGHT);
-        StackPane.setMargin(formBox, new Insets(0, 50, 0, 0));
+        StackPane.setMargin(formBox, new Insets(30, 60, 30, 0));
+
+        // Responsive: center card when window is narrow
+        root.widthProperty().addListener((obs, oldW, newW) -> {
+            if (newW.doubleValue() < 700) {
+                StackPane.setAlignment(formBox, Pos.CENTER);
+                StackPane.setMargin(formBox, new Insets(20));
+            } else {
+                StackPane.setAlignment(formBox, Pos.CENTER_RIGHT);
+                StackPane.setMargin(formBox, new Insets(30, 60, 30, 0));
+            }
+        });
 
         // =========================================
         // SCENE
         // =========================================
 
         loginScene = new Scene(root);
-
         return loginScene;
     }
 
@@ -770,14 +846,129 @@ public class Login implements Page {
     // =========================================
 
     private void shakeButton(Button button) {
-
         TranslateTransition shake = new TranslateTransition(
                 Duration.millis(70), button);
-
         shake.setFromX(-10);
         shake.setToX(10);
         shake.setCycleCount(6);
         shake.setAutoReverse(true);
         shake.play();
+    }
+
+    // =========================================
+    // PASSWORD ROW — field + eye toggle button
+    // =========================================
+
+    private HBox buildPasswordRow(String promptText) {
+
+        PasswordField passField = new PasswordField();
+        passField.setPromptText(promptText);
+        passField.setStyle(FIELD_STYLE);
+        HBox.setHgrow(passField, Priority.ALWAYS);
+
+        TextField visibleField = new TextField();
+        visibleField.setPromptText(promptText);
+        visibleField.setStyle(FIELD_STYLE);
+        visibleField.setVisible(false);
+        visibleField.setManaged(false);
+        HBox.setHgrow(visibleField, Priority.ALWAYS);
+
+        // Sync text both ways
+        passField.textProperty().addListener((obs, o, n) -> {
+            if (passField.isVisible()) visibleField.setText(n);
+        });
+        visibleField.textProperty().addListener((obs, o, n) -> {
+            if (visibleField.isVisible()) passField.setText(n);
+        });
+
+        // Eye icon button
+        ImageView eyeIcon = null;
+        try {
+            Image eyeImg = new Image(
+                    getClass().getResourceAsStream("/assests/images/eye.jpeg"), 20, 20, true, true);
+            eyeIcon = new ImageView(eyeImg);
+        } catch (Exception ignored) { }
+
+        Button eyeBtn = new Button(eyeIcon != null ? "" : "👁");
+        if (eyeIcon != null) eyeBtn.setGraphic(eyeIcon);
+        eyeBtn.setStyle(EYE_BTN_STYLE);
+        eyeBtn.setOpacity(0.75);
+
+        final boolean[] shown = { false };
+        eyeBtn.setOnAction(ev -> {
+            shown[0] = !shown[0];
+            if (shown[0]) {
+                visibleField.setText(passField.getText());
+                passField.setVisible(false);
+                passField.setManaged(false);
+                visibleField.setVisible(true);
+                visibleField.setManaged(true);
+                eyeBtn.setOpacity(1.0);
+            } else {
+                passField.setText(visibleField.getText());
+                visibleField.setVisible(false);
+                visibleField.setManaged(false);
+                passField.setVisible(true);
+                passField.setManaged(true);
+                eyeBtn.setOpacity(0.75);
+            }
+        });
+
+        HBox row = new HBox(6, passField, visibleField, eyeBtn);
+        row.setAlignment(Pos.CENTER_LEFT);
+        row.setStyle(
+                "-fx-background-color: rgba(255,255,255,0.10);" +
+                "-fx-border-color: rgba(255,255,255,0.35);" +
+                "-fx-border-radius: 12;" +
+                "-fx-background-radius: 12;" +
+                "-fx-padding: 2 8 2 2;");
+        row.setMaxWidth(Double.MAX_VALUE);
+
+        return row;
+    }
+
+    // =========================================
+    // SUBMIT BUTTON BUILDER
+    // =========================================
+
+    private Button buildSubmitButton(String text) {
+        Button btn = new Button(text);
+        btn.setStyle(
+                "-fx-background-color: linear-gradient(to right, #2563EB, #1D4ED8);" +
+                "-fx-text-fill: white;" +
+                "-fx-font-size: 15px;" +
+                "-fx-font-weight: bold;" +
+                "-fx-background-radius: 12;" +
+                "-fx-cursor: hand;" +
+                "-fx-padding: 12 0;");
+        btn.setMaxWidth(Double.MAX_VALUE);
+
+        btn.setOnMouseEntered(e -> {
+            btn.setStyle(
+                    "-fx-background-color: linear-gradient(to right, #1D4ED8, #1E40AF);" +
+                    "-fx-text-fill: white;" +
+                    "-fx-font-size: 15px;" +
+                    "-fx-font-weight: bold;" +
+                    "-fx-background-radius: 12;" +
+                    "-fx-cursor: hand;" +
+                    "-fx-padding: 12 0;");
+            btn.setScaleX(1.02);
+            btn.setScaleY(1.02);
+        });
+
+        btn.setOnMouseExited(e -> {
+            btn.setStyle(
+                    "-fx-background-color: linear-gradient(to right, #2563EB, #1D4ED8);" +
+                    "-fx-text-fill: white;" +
+                    "-fx-font-size: 15px;" +
+                    "-fx-font-weight: bold;" +
+                    "-fx-background-radius: 12;" +
+                    "-fx-cursor: hand;" +
+                    "-fx-padding: 12 0;");
+            btn.setScaleX(1.0);
+            btn.setScaleY(1.0);
+        });
+
+        return btn;
     }
 }

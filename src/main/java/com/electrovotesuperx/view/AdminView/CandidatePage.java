@@ -51,6 +51,10 @@ public class CandidatePage extends VBox {
     // CONSTRUCTOR
     // =========================================================
     public CandidatePage() {
+        applicationList.setPadding(new Insets(4, 4, 6, 4));
+        approvedList.setPadding(new Insets(4, 4, 6, 4));
+        electionCandidateList.setPadding(new Insets(4, 4, 6, 4));
+
         setSpacing(16);
         setPadding(new Insets(20, 24, 24, 24));
         setStyle(
@@ -72,12 +76,20 @@ public class CandidatePage extends VBox {
 
         VBox rightColumn = new VBox(12);
         rightColumn.setPadding(new Insets(0, 0, 0, 8));
-        rightColumn.getChildren().addAll(
-                buildFilterBar(),
-                buildApplicationSection(),
-                buildApprovedSection());
-        VBox.setVgrow(rightColumn.getChildren().get(1), Priority.ALWAYS);
-        VBox.setVgrow(rightColumn.getChildren().get(2), Priority.ALWAYS);
+
+        HBox filterBar = buildFilterBar();
+        VBox appSection = buildApplicationSection();
+        VBox approvedSection = buildApprovedSection();
+
+        appSection.setMinHeight(200);
+        approvedSection.setMinHeight(200);
+        appSection.setPrefHeight(300);
+        approvedSection.setPrefHeight(300);
+
+        VBox.setVgrow(appSection, Priority.ALWAYS);
+        VBox.setVgrow(approvedSection, Priority.ALWAYS);
+
+        rightColumn.getChildren().addAll(filterBar, appSection, approvedSection);
 
         splitPane.getItems().addAll(leftColumn, rightColumn);
         splitPane.setDividerPositions(0.34);
@@ -380,7 +392,7 @@ public class CandidatePage extends VBox {
         })).exceptionally(ex -> {
             Platform.runLater(() -> {
                 loadingSpinner.setVisible(false);
-                showBaseAlert("Sync Error", "Failed to fetch candidates from Firebase: " + ex.getMessage());
+                showBaseAlert("Sync Error", "Failed to fetch candidates: " + ex.getMessage());
             });
             return null;
         });
@@ -417,7 +429,7 @@ public class CandidatePage extends VBox {
         })).exceptionally(ex -> {
             Platform.runLater(() -> {
                 loadingSpinner.setVisible(false);
-                showBaseAlert("Update Error", "Failed to update candidate status in Firebase: " + ex.getMessage());
+                showBaseAlert("Update Error", "Failed to update candidate status: " + ex.getMessage());
             });
             return null;
         });
@@ -460,7 +472,7 @@ public class CandidatePage extends VBox {
     HBox createApplicationCard(CandidateModel app) {
         HBox card = new HBox(12);
         card.setPadding(new Insets(10, 14, 10, 14));
-        card.setMinHeight(76);
+        card.setMinHeight(Region.USE_PREF_SIZE);
         card.setAlignment(Pos.CENTER_LEFT);
 
         String borderAccentColor = "ACCEPTED".equalsIgnoreCase(app.status) ? "#34d399"
@@ -566,7 +578,7 @@ public class CandidatePage extends VBox {
     private HBox createApprovedCard(CandidateModel app) {
         HBox card = new HBox(12);
         card.setPadding(new Insets(10, 14, 10, 14));
-        card.setMinHeight(68);
+        card.setMinHeight(Region.USE_PREF_SIZE);
         card.setAlignment(Pos.CENTER_LEFT);
         card.setStyle("-fx-background-color: #ffffff; " +
                 "-fx-background-radius: 10; " +
@@ -771,7 +783,7 @@ public class CandidatePage extends VBox {
         textBox.setAlignment(Pos.CENTER);
         Label title = new Label("Accept " + app.name + "?");
         title.setStyle(FONT + "-fx-font-size: 16px; -fx-font-weight: 900; -fx-text-fill: #064e3b;");
-        Label desc = new Label("This candidate will be approved in Firebase and published to the live ballot.");
+        Label desc = new Label("This candidate will be approved and published to the live ballot.");
         desc.setStyle(FONT + "-fx-font-size: 12px; -fx-text-fill: #64748b;");
         textBox.getChildren().addAll(title, desc);
 
@@ -810,7 +822,7 @@ public class CandidatePage extends VBox {
         textBox.setAlignment(Pos.CENTER);
         Label title = new Label("Reject " + app.name + "?");
         title.setStyle(FONT + "-fx-font-size: 16px; -fx-font-weight: 900; -fx-text-fill: #991b1b;");
-        Label desc = new Label("This candidate will be rejected in Firebase and excluded from the ballot.");
+        Label desc = new Label("This candidate will be rejected and excluded from the ballot.");
         desc.setStyle(FONT + "-fx-font-size: 12px; -fx-text-fill: #64748b;");
         textBox.getChildren().addAll(title, desc);
 

@@ -1844,11 +1844,17 @@ public class ElectionPage extends VBox {
                 // Extract Existing Start Date & Time
                 String rawStart = startLabel.getText().replace("Voting Start: ", "").trim();
                 String startTimeStr = "09:00";
-                if (rawStart.length() >= 5 && rawStart.contains(":")) {
-                        startTimeStr = rawStart.substring(rawStart.lastIndexOf(" ") + 1);
+                LocalDate parsedStartDate = LocalDate.now();
+                if (rawStart.contains(" ")) {
+                        int lastSpace = rawStart.lastIndexOf(" ");
+                        String datePart = rawStart.substring(0, lastSpace).trim();
+                        startTimeStr = rawStart.substring(lastSpace + 1).trim();
+                        try {
+                                parsedStartDate = LocalDate.parse(datePart, DateTimeFormatter.ofPattern("dd MMM yyyy", java.util.Locale.ENGLISH));
+                        } catch (Exception ignored) {}
                 }
 
-                DatePicker startDate = new DatePicker();
+                DatePicker startDate = new DatePicker(parsedStartDate);
                 startDate.setStyle(FONT + "-fx-font-size: 12px;");
                 startDate.setMaxWidth(Double.MAX_VALUE);
                 TimePickerBox startTimePicker = new TimePickerBox("09", "00");
@@ -1861,11 +1867,17 @@ public class ElectionPage extends VBox {
                 // Extract Existing End Date & Time
                 String rawEnd = endLabel.getText().replace("Voting End: ", "").trim();
                 String endTimeStr = "17:00";
-                if (rawEnd.length() >= 5 && rawEnd.contains(":")) {
-                        endTimeStr = rawEnd.substring(rawEnd.lastIndexOf(" ") + 1);
+                LocalDate parsedEndDate = LocalDate.now().plusDays(5);
+                if (rawEnd.contains(" ")) {
+                        int lastSpace = rawEnd.lastIndexOf(" ");
+                        String datePart = rawEnd.substring(0, lastSpace).trim();
+                        endTimeStr = rawEnd.substring(lastSpace + 1).trim();
+                        try {
+                                parsedEndDate = LocalDate.parse(datePart, DateTimeFormatter.ofPattern("dd MMM yyyy", java.util.Locale.ENGLISH));
+                        } catch (Exception ignored) {}
                 }
 
-                DatePicker endDate = new DatePicker();
+                DatePicker endDate = new DatePicker(parsedEndDate);
                 endDate.setStyle(FONT + "-fx-font-size: 12px;");
                 endDate.setMaxWidth(Double.MAX_VALUE);
                 TimePickerBox endTimePicker = new TimePickerBox("17", "00");
@@ -1895,6 +1907,8 @@ public class ElectionPage extends VBox {
                                         return;
                                 }
 
+                                String electionId = electionIds.get(oldName);
+
                                 if (!newName.equals(oldName)) {
                                         if (electionCards.containsKey(newName)) {
                                                 showError("An election with this name already exists.");
@@ -1904,10 +1918,14 @@ public class ElectionPage extends VBox {
                                         List<String> oldPositions = positions.remove(oldName);
                                         Label oldPositionLabel = positionLabels.remove(oldName);
                                         HBox oldCard = electionCards.remove(oldName);
+                                        electionIds.remove(oldName);
 
                                         positions.put(newName, oldPositions);
                                         positionLabels.put(newName, oldPositionLabel);
                                         electionCards.put(newName, oldCard);
+                                        if (electionId != null) {
+                                                electionIds.put(newName, electionId);
+                                        }
 
                                         nameLabel.setText(newName);
                                 }
@@ -1916,7 +1934,7 @@ public class ElectionPage extends VBox {
 
                                 String newStart = (startDate.getValue() != null)
                                                 ? startDate.getValue()
-                                                                .format(DateTimeFormatter.ofPattern("dd MMM yyyy"))
+                                                                .format(DateTimeFormatter.ofPattern("dd MMM yyyy", java.util.Locale.ENGLISH))
                                                                 + " " + startTimePicker.getTimeString()
                                                 : (rawStart.contains(" ")
                                                                 ? rawStart.substring(0, rawStart.lastIndexOf(" ")) + " "
@@ -1924,7 +1942,7 @@ public class ElectionPage extends VBox {
                                                                 : rawStart);
 
                                 String newEnd = (endDate.getValue() != null)
-                                                ? endDate.getValue().format(DateTimeFormatter.ofPattern("dd MMM yyyy"))
+                                                ? endDate.getValue().format(DateTimeFormatter.ofPattern("dd MMM yyyy", java.util.Locale.ENGLISH))
                                                                 + " " + endTimePicker.getTimeString()
                                                 : (rawEnd.contains(" ")
                                                                 ? rawEnd.substring(0, rawEnd.lastIndexOf(" ")) + " "
@@ -1934,6 +1952,36 @@ public class ElectionPage extends VBox {
                                 startLabel.setText("Voting Start: " + newStart);
                                 endLabel.setText("Voting End: " + newEnd);
                                 scheduleLabel.setText("⏱ " + newStart + "  ➔  " + newEnd);
+
+                                // Save update to Firestore backend
+                                if (electionId != null) {
+                                        final String finalName = newName;
+                                        final String finalDesc = description.getText().trim();
+                                        List<String> currentPositions = positions.get(finalName);
+                                        ElectionData updatedElection = new ElectionData(
+                                                electionId,
+                                                finalName,
+                                                finalDesc,
+                                                newStart,
+                                                newEnd,
+                                                "Draft",
+                                                currentPositions != null ? currentPositions : new ArrayList<>(),
+                                                com.electrovotesuperx.config.SessionManager.joinCode
+                                        );
+
+                                        Thread t = new Thread(() -> {
+                                                String error = ElectionController.updateElection(updatedElection);
+                                                Platform.runLater(() -> {
+                                                        if (error != null) {
+                                                                showError("Firestore Error: " + error);
+                                                        } else {
+                                                                loadElectionsFromFirestore();
+                                                        }
+                                                });
+                                        });
+                                        t.setDaemon(true);
+                                        t.start();
+                                }
                         }
                 });
         }

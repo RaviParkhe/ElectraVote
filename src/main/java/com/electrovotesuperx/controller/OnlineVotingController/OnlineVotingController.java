@@ -56,7 +56,7 @@ public class OnlineVotingController {
             List<Candidate> all = CandidateDAO.getCandidatesByElection(electionId, idToken);
             List<Candidate> approved = new ArrayList<>();
             for (Candidate c : all) {
-                if ("Approved".equalsIgnoreCase(c.getStatus())) {
+                if (c.getStatus() != null && ("ACCEPTED".equalsIgnoreCase(c.getStatus().trim()) || "APPROVED".equalsIgnoreCase(c.getStatus().trim()))) {
                     approved.add(c);
                 }
             }

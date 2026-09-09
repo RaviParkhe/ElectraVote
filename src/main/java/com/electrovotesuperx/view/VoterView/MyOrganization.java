@@ -103,7 +103,7 @@ public class MyOrganization {
         
         ProgressIndicator spinner = new ProgressIndicator();
         spinner.setMaxSize(36, 36);
-        Label loadingText = new Label("Discovering your organization memberships from cloud...");
+        Label loadingText = new Label("Loading your organization memberships...");
         loadingText.setStyle("-fx-font-size: 13px; -fx-text-fill: #64748B; -fx-font-weight: bold;");
         loadingBox.getChildren().addAll(spinner, loadingText);
         orgsList.getChildren().add(loadingBox);

@@ -317,7 +317,7 @@ public class VotersPage extends VBox {
         })).exceptionally(ex -> {
             Platform.runLater(() -> {
                 loadingSpinner.setVisible(false);
-                showBaseAlert("Sync Error", "Failed to fetch data from Firebase: " + ex.getMessage());
+                showBaseAlert("Sync Error", "Failed to fetch data: " + ex.getMessage());
             });
             return null;
         });
@@ -339,7 +339,7 @@ public class VotersPage extends VBox {
                 if (updated) {
                     voter.status = newStatus;
                 } else {
-                    throw new RuntimeException("Failed to update status in Firebase.");
+                    throw new RuntimeException("Failed to update status.");
                 }
             } catch (Exception ex) {
                 throw new RuntimeException(ex);
@@ -351,7 +351,7 @@ public class VotersPage extends VBox {
         })).exceptionally(ex -> {
             Platform.runLater(() -> {
                 loadingSpinner.setVisible(false);
-                showBaseAlert("Update Error", "Failed to update record in Firebase: " + ex.getMessage());
+                showBaseAlert("Update Error", "Failed to update record: " + ex.getMessage());
             });
             return null;
         });
@@ -664,7 +664,7 @@ public class VotersPage extends VBox {
                 + "-fx-font-size: 15px; -fx-font-weight: 900; -fx-text-fill: #064e3b; -fx-text-alignment: CENTER;");
 
         Label desc = new Label(
-                "This member will be issued official voting authorization in Firebase for all organizational elections.");
+                "This member will be issued official voting authorization for all organizational elections.");
         desc.setWrapText(true);
         desc.setStyle(FONT
                 + "-fx-font-size: 12px; -fx-text-fill: #64748b; -fx-text-alignment: CENTER; -fx-line-spacing: 1.5px;");
@@ -717,7 +717,7 @@ public class VotersPage extends VBox {
         title.setStyle(FONT
                 + "-fx-font-size: 15px; -fx-font-weight: 900; -fx-text-fill: #991b1b; -fx-text-alignment: CENTER;");
 
-        Label desc = new Label("This member's registration request will be denied in Firebase and marked as rejected.");
+        Label desc = new Label("This member's registration request will be denied and marked as rejected.");
         desc.setWrapText(true);
         desc.setStyle(FONT
                 + "-fx-font-size: 12px; -fx-text-fill: #64748b; -fx-text-alignment: CENTER; -fx-line-spacing: 1.5px;");

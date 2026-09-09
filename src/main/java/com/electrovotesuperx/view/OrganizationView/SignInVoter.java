@@ -116,7 +116,7 @@ public class SignInVoter implements Page {
             // Disable button and show loading state
             signIn.setDisable(true);
             signIn.setText("Signing in...");
-            statusLabel.setText("Connecting to Firebase...");
+            statusLabel.setText("Authenticating credentials...");
 
             // Run Firebase calls on a background thread
             Thread thread = new Thread(() -> {

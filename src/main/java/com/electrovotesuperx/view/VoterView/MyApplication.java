@@ -97,7 +97,7 @@ public class MyApplication {
         loadingBox.setAlignment(Pos.CENTER);
         loadingBox.setPadding(new Insets(30));
         ProgressIndicator spinner = new ProgressIndicator();
-        Label loadingLbl = new Label("Retrieving your candidate filings from Firebase...");
+        Label loadingLbl = new Label("Retrieving your candidate filings...");
         loadingLbl.setStyle("-fx-text-fill: #4338CA; -fx-font-weight: bold; -fx-font-size: 13px;");
         loadingBox.getChildren().addAll(spinner, loadingLbl);
         applicationsList.getChildren().add(loadingBox);

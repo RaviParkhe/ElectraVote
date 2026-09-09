@@ -250,7 +250,7 @@ public class ResultPage extends VBox {
         VBox loadingBox = new VBox(12);
         loadingBox.setAlignment(Pos.CENTER);
         loadingBox.setPrefHeight(250);
-        Label loadingLbl = new Label("Fetching live certified results from Firebase...");
+        Label loadingLbl = new Label("Fetching live certified results...");
         loadingLbl.setStyle(FONT + "-fx-font-size: 14px; -fx-font-weight: 700; -fx-text-fill: #4338ca;");
         loadingBox.getChildren().addAll(new ProgressIndicator(), loadingLbl);
         resultList.getChildren().add(loadingBox);

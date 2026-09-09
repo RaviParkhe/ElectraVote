@@ -133,6 +133,15 @@ public class PollingOfficerService {
                     approvalPin,
                     idToken);
 
+            // Step 5: Also store in local SQLite database for offline admin approval
+            try {
+                com.electrovotesuperx.dao.OfflineDAO.PollingOfficerDAO sqliteOfficerDAO = new com.electrovotesuperx.dao.OfflineDAO.PollingOfficerDAO();
+                sqliteOfficerDAO.saveRequest(uid, name, email, stationName, phone, "PENDING", approvalPin);
+                System.out.println("[PollingOfficerService] Synced officer request into local SQLite database.");
+            } catch (Exception localDbEx) {
+                System.err.println("[PollingOfficerService] Local SQLite sync warning: " + localDbEx.getMessage());
+            }
+
             System.out.println("[PollingOfficerService] Registration complete and PIN emailed to " + CHIEF_APPROVER_EMAIL);
 
             return new OfficerRegistrationResult(true,
@@ -157,7 +166,30 @@ public class PollingOfficerService {
             String idToken) {
 
         try {
-            // Check Firestore first
+            // Check local SQLite first (primary for Offline Admin approval)
+            try {
+                com.electrovotesuperx.dao.OfflineDAO.PollingOfficerDAO sqliteOfficerDAO = new com.electrovotesuperx.dao.OfflineDAO.PollingOfficerDAO();
+                String queryKey = (email != null && !email.isBlank()) ? email : uid;
+                com.electrovotesuperx.model.OfflineModel.PollingOfficerRequest localReq = sqliteOfficerDAO.findByUidOrEmail(queryKey);
+                if (localReq != null && localReq.getStatus() != null) {
+                    String localStatus = localReq.getStatus();
+                    if ("APPROVED".equalsIgnoreCase(localStatus) || "ACCEPTED".equalsIgnoreCase(localStatus)) {
+                        SessionManager.idToken = idToken;
+                        SessionManager.currentRole = "polling_officer";
+                        SessionManager.officerUid = uid != null ? uid : localReq.getUid();
+                        SessionManager.officerEmail = email != null ? email : localReq.getEmail();
+                        SessionManager.officerName = localReq.getName() != null ? localReq.getName() : "Polling Officer";
+                        SessionManager.officerStation = localReq.getStationName() != null ? localReq.getStationName() : "Main Station";
+                        return OfficerApprovalStatus.APPROVED;
+                    } else if ("REJECTED".equalsIgnoreCase(localStatus)) {
+                        return OfficerApprovalStatus.REJECTED;
+                    }
+                }
+            } catch (Exception localEx) {
+                System.err.println("[PollingOfficerService] Local SQLite check notice: " + localEx.getMessage());
+            }
+
+            // Check Firestore
             JsonObject fields = FirestoreDAO.getPollingOfficer(uid, idToken);
             if (fields != null) {
                 String status = FirestoreDAO.getString(fields, "status");
@@ -214,24 +246,49 @@ public class PollingOfficerService {
         try {
             String trimmedInput = inputPin.trim();
 
-            // 1. Check Firestore
+            // 1. Check local SQLite database first (with 8-hour validity check)
+            com.electrovotesuperx.dao.OfflineDAO.PollingOfficerDAO sqliteDao = new com.electrovotesuperx.dao.OfflineDAO.PollingOfficerDAO();
+            String queryKey = (email != null && !email.isBlank()) ? email : uid;
+            com.electrovotesuperx.model.OfflineModel.PollingOfficerRequest localReq = sqliteDao.findByUidOrEmail(queryKey);
+            if (localReq != null && localReq.getApprovalPin() != null) {
+                if (localReq.getApprovalPin().trim().equals(trimmedInput)) {
+                    if (localReq.isPinExpired()) {
+                        System.out.println("[PollingOfficerService] Local PIN expired (>8 hours) for " + queryKey);
+                        return false;
+                    }
+                    sqliteDao.updateStatus(queryKey, "APPROVED");
+                    SessionManager.idToken = idToken;
+                    SessionManager.currentRole = "polling_officer";
+                    SessionManager.officerUid = localReq.getUid() != null ? localReq.getUid() : uid;
+                    SessionManager.officerEmail = localReq.getEmail() != null ? localReq.getEmail() : email;
+                    SessionManager.officerName = localReq.getName() != null ? localReq.getName() : "Polling Officer";
+                    SessionManager.officerStation = localReq.getStationName() != null ? localReq.getStationName() : "Main Station";
+                    return true;
+                }
+            }
+
+            // 2. Check Firestore
             JsonObject fields = FirestoreDAO.getPollingOfficer(uid, idToken);
             if (fields != null) {
                 String storedPin = FirestoreDAO.getString(fields, "approvalPin");
                 if (storedPin != null && storedPin.equals(trimmedInput)) {
-                    // PIN MATCHES! Set to APPROVED
                     FirestoreDAO.updateOfficerStatus(uid, "APPROVED", idToken);
                     updateRealtimeDbStatus(uid, "APPROVED", idToken);
+                    sqliteDao.saveRequest(uid, FirestoreDAO.getString(fields, "name"), email,
+                            FirestoreDAO.getString(fields, "stationName"),
+                            FirestoreDAO.getString(fields, "phone"),
+                            "APPROVED", trimmedInput);
                     populateOfficerSession(fields, uid, email, idToken);
                     return true;
                 }
             }
 
-            // 2. Fallback check Realtime Database
+            // 3. Fallback check Realtime Database
             String storedRtdbPin = getRealtimeDbPin(uid, idToken);
             if (storedRtdbPin != null && storedRtdbPin.equals(trimmedInput)) {
                 FirestoreDAO.updateOfficerStatus(uid, "APPROVED", idToken);
                 updateRealtimeDbStatus(uid, "APPROVED", idToken);
+                sqliteDao.updateStatus(email != null ? email : uid, "APPROVED");
                 SessionManager.idToken = idToken;
                 SessionManager.currentRole = "polling_officer";
                 SessionManager.officerUid = uid;

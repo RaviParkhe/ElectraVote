@@ -432,7 +432,7 @@ public class Vote {
         VBox loadingBox = new VBox(10);
         loadingBox.setAlignment(Pos.CENTER);
         loadingBox.setPadding(new Insets(30));
-        loadingBox.getChildren().addAll(new ProgressIndicator(), new Label("Loading official ballots from Firebase..."));
+        loadingBox.getChildren().addAll(new ProgressIndicator(), new Label("Loading official ballots..."));
         electionsList.getChildren().add(loadingBox);
 
         Thread t = new Thread(() -> {
@@ -554,7 +554,7 @@ public class Vote {
 
         VBox positionsList = new VBox(20);
         ProgressIndicator pi = new ProgressIndicator();
-        VBox loadingBox = new VBox(10, pi, new Label("Loading official candidates from Firebase..."));
+        VBox loadingBox = new VBox(10, pi, new Label("Loading official candidate roster..."));
         loadingBox.setAlignment(Pos.CENTER);
         loadingBox.setPadding(new Insets(30));
         positionsList.getChildren().add(loadingBox);
@@ -574,7 +574,11 @@ public class Vote {
                 Set<String> positionsSet = new LinkedHashSet<>();
                 if (election.getPositions() != null && !election.getPositions().isEmpty()) positionsSet.addAll(election.getPositions());
                 for (Candidate c : candidates) {
-                    if (c.getPosition() != null && !c.getPosition().isBlank()) positionsSet.add(c.getPosition());
+                    boolean isApprovedCandidate = c.getStatus() != null &&
+                            ("ACCEPTED".equalsIgnoreCase(c.getStatus().trim()) || "APPROVED".equalsIgnoreCase(c.getStatus().trim()));
+                    if (isApprovedCandidate && c.getPosition() != null && !c.getPosition().isBlank()) {
+                        positionsSet.add(c.getPosition());
+                    }
                 }
                 if (positionsSet.isEmpty()) positionsSet.add("Candidate Office");
                 Platform.runLater(() -> {
@@ -584,7 +588,11 @@ public class Vote {
                     for (String pos : positionNames) {
                         List<Candidate> posCandidates = new ArrayList<>();
                         for (Candidate c : candidates) {
-                            if (pos.equalsIgnoreCase(c.getPosition())) posCandidates.add(c);
+                            boolean isApprovedCandidate = c.getStatus() != null &&
+                                    ("ACCEPTED".equalsIgnoreCase(c.getStatus().trim()) || "APPROVED".equalsIgnoreCase(c.getStatus().trim()));
+                            if (isApprovedCandidate && pos.equalsIgnoreCase(c.getPosition())) {
+                                posCandidates.add(c);
+                            }
                         }
                         ToggleGroup group = new ToggleGroup();
                         positionsList.getChildren().add(createPositionSection(pos, group, posCandidates));
@@ -697,7 +705,7 @@ public class Vote {
         title.setFill(Color.web(GREEN));
         title.setFont(Font.font("Arial", FontWeight.BOLD, 22));
         String receiptCode = "ZK-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
-        Text msg = new Text("Your vote for '" + electionTitle + "' has been encrypted using zero-knowledge homomorphic cryptography and committed to Firebase. Receipt: " + receiptCode);
+        Text msg = new Text("Your vote for '" + electionTitle + "' has been encrypted using zero-knowledge homomorphic cryptography and recorded securely. Receipt: " + receiptCode);
         msg.setFill(Color.web(TEXT));
         msg.setFont(Font.font(13));
         msg.setWrappingWidth(750);

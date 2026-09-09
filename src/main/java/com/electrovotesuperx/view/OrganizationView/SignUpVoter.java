@@ -133,7 +133,7 @@ public class SignUpVoter implements Page {
             // Disable button and show loading state
             signUpBtn.setDisable(true);
             signUpBtn.setText("Registering...");
-            statusLabel.setText("Creating your account on Firebase...");
+            statusLabel.setText("Creating voter account...");
 
             // Run Firebase calls on a background thread
             Thread thread = new Thread(() -> {

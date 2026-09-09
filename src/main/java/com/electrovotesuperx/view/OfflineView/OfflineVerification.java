@@ -5,6 +5,7 @@ import com.electrovotesuperx.dao.OfflineDAO.ElectionDAO;
 import com.electrovotesuperx.exception.DatabaseException;
 import com.electrovotesuperx.model.OfflineModel.Election;
 import com.electrovotesuperx.model.OfflineModel.Voter;
+import com.electrovotesuperx.service.OfflineService.RiskAnalysisService;
 import com.electrovotesuperx.service.OfflineService.TwilioOtpService;
 import com.electrovotesuperx.service.OfflineService.VoterVerificationService;
 import com.electrovotesuperx.view.CommonView.Header;
@@ -71,6 +72,9 @@ public class OfflineVerification {
 
     /** Timer for OTP countdown — cancelled when OTP is verified or view is reset */
     private Timer otpCountdownTimer;
+
+    /** Risk analysis service — evaluates lock/flood/velocity before OTP dispatch */
+    private final RiskAnalysisService riskService = new RiskAnalysisService();
 
     // =========================================================
     // CONSTRUCTOR
@@ -627,6 +631,20 @@ public class OfflineVerification {
     // =========================================================
 
     private void sendSmsOtp(String electionId, Voter voter, String phone) {
+
+        // =============================================================
+        // RISK ANALYSIS: assess before dispatching OTP
+        // =============================================================
+        String officerEmail = com.electrovotesuperx.config.SessionManager.officerEmail;
+
+        RiskAnalysisService.RiskVerdict verdict = riskService.assess(
+                voter.getVoterId(), electionId, officerEmail);
+
+        if (verdict.isLocked()) {
+            showRiskLockedBanner(verdict.reason());
+            return;
+        }
+
         showSmsSendingCard(electionId, voter, phone);
 
         controller.sendTwilioSmsOtp(
@@ -637,8 +655,10 @@ public class OfflineVerification {
                 new TwilioOtpService.TwilioOtpCallback() {
                     @Override
                     public void onOtpSent(String generatedOtp, String formattedPhone) {
+                        // Log the OTP send for risk tracking
+                        riskService.logOtpSend(voter.getVoterId(), electionId, officerEmail);
                         Platform.runLater(() -> {
-                            showOtpCard(electionId, voter, formattedPhone);
+                            showOtpCard(electionId, voter, formattedPhone, verdict);
                             verify.setText("✓  Verify Voter");
                             verify.setDisable(false);
                         });
@@ -841,7 +861,8 @@ public class OfflineVerification {
     private void showOtpCard(
             String electionId,
             Voter voter,
-            String formattedPhone) {
+            String formattedPhone,
+            RiskAnalysisService.RiskVerdict riskVerdict) {
 
         result.getChildren().clear();
         result.setVisible(true);
@@ -962,6 +983,14 @@ public class OfflineVerification {
         overrideToggle.setOnMouseClicked(ev -> executeEmergencyOverride(electionId, voter));
 
         smsStatusBox.getChildren().addAll(smsSentIcon, overrideSpacer, overrideToggle);
+
+        // =====================================================
+        // RISK BANNER (shown if FLAGGED or LOCKED)
+        // =====================================================
+        VBox riskBanner = null;
+        if (riskVerdict != null && riskVerdict.isFlagged()) {
+            riskBanner = createRiskFlaggedBanner(riskVerdict.reason());
+        }
 
         // =====================================================
         // COUNTDOWN TIMER
@@ -1212,8 +1241,11 @@ public class OfflineVerification {
             }
 
             boolean valid = controller.verifyTwilioOtp(electionId, voter.getVoterId(), inputOtp.toString());
+            String officerEmail = com.electrovotesuperx.config.SessionManager.officerEmail;
 
             if (valid) {
+                // Log successful OTP verification
+                riskService.logOtpSuccess(voter.getVoterId(), electionId, officerEmail);
                 cancelOtpTimer();
 
                 try {
@@ -1230,6 +1262,8 @@ public class OfflineVerification {
                     showError("Error issuing voter token: " + ex.getMessage());
                 }
             } else {
+                // Log OTP failure for risk tracking
+                riskService.logOtpFailure(voter.getVoterId(), electionId, officerEmail);
                 if (controller.isOtpExpired(electionId, voter.getVoterId())) {
                     otpError.setText("OTP has expired. Click 'Resend SMS' to receive a new code.");
                 } else {
@@ -1263,23 +1297,141 @@ public class OfflineVerification {
         otpDivider.setStyle("-fx-background-color: #E2E8F0;");
 
         // Assemble OTP Card
-        result.getChildren().addAll(
-                otpHeader,
-                otpDivider,
-                smsStatusBox,
-                countdownLabel,
-                createVerticalSpace(4),
-                enterLabel,
-                otpInputRow,
-                otpError,
-                createVerticalSpace(4),
-                otpButtonRow
-        );
+        if (riskBanner != null) {
+            result.getChildren().addAll(
+                    otpHeader,
+                    otpDivider,
+                    riskBanner,
+                    smsStatusBox,
+                    countdownLabel,
+                    createVerticalSpace(4),
+                    enterLabel,
+                    otpInputRow,
+                    otpError,
+                    createVerticalSpace(4),
+                    otpButtonRow
+            );
+        } else {
+            result.getChildren().addAll(
+                    otpHeader,
+                    otpDivider,
+                    smsStatusBox,
+                    countdownLabel,
+                    createVerticalSpace(4),
+                    enterLabel,
+                    otpInputRow,
+                    otpError,
+                    createVerticalSpace(4),
+                    otpButtonRow
+            );
+        }
 
         // Auto-focus first input box
         PauseTransition focusDelay = new PauseTransition(Duration.millis(300));
         focusDelay.setOnFinished(ev -> otpInputFields[0].requestFocus());
         focusDelay.play();
+    }
+
+    // =========================================================
+    // RISK: AMBER FLAGGED BANNER
+    //
+    // Shown inside the OTP card when FLAGGED (flood or velocity).
+    // Voter can still proceed — officer is warned.
+    // =========================================================
+
+    private VBox createRiskFlaggedBanner(String reason) {
+        VBox banner = new VBox(6);
+        banner.setPadding(new Insets(12, 16, 12, 16));
+        banner.setStyle(
+                "-fx-background-color: #FFFBEB;" +
+                "-fx-background-radius: 10;" +
+                "-fx-border-color: #FCD34D;" +
+                "-fx-border-width: 1.5;" +
+                "-fx-border-radius: 10;"
+        );
+
+        Label title = new Label("⚠\ufe0f  RISK FLAGGED — Officer Review Required");
+        title.setStyle(
+                "-fx-font-size: 13px;" +
+                "-fx-font-weight: 800;" +
+                "-fx-text-fill: #92400E;"
+        );
+
+        Label detail = new Label(reason);
+        detail.setWrapText(true);
+        detail.setStyle(
+                "-fx-font-size: 12px;" +
+                "-fx-text-fill: #78350F;"
+        );
+
+        Label proceed = new Label("Verification may proceed. This event has been logged to the audit trail.");
+        proceed.setStyle(
+                "-fx-font-size: 11.5px;" +
+                "-fx-text-fill: #92400E;" +
+                "-fx-font-weight: 600;"
+        );
+
+        banner.getChildren().addAll(title, detail, proceed);
+        return banner;
+    }
+
+    // =========================================================
+    // RISK: RED LOCKED BANNER
+    //
+    // Replaces the entire result area when LOCKED.
+    // OTP cannot be sent. Officer sees lock details.
+    // =========================================================
+
+    private void showRiskLockedBanner(String reason) {
+        result.getChildren().clear();
+        result.setVisible(true);
+        result.setManaged(true);
+        result.setMaxWidth(Double.MAX_VALUE);
+        result.setFillWidth(true);
+        result.setPadding(new Insets(22));
+        result.setStyle(
+                "-fx-background-color: #FEF2F2;" +
+                "-fx-background-radius: 14;" +
+                "-fx-border-color: #FECACA;" +
+                "-fx-border-width: 1.5;" +
+                "-fx-border-radius: 14;"
+        );
+
+        Label title = new Label("🔒  VERIFICATION LOCKED");
+        title.setStyle(
+                "-fx-font-size: 15px;" +
+                "-fx-font-weight: 800;" +
+                "-fx-text-fill: #991B1B;"
+        );
+
+        Label detail = new Label(reason);
+        detail.setWrapText(true);
+        detail.setStyle(
+                "-fx-font-size: 13px;" +
+                "-fx-text-fill: #B91C1C;" +
+                "-fx-font-weight: 600;"
+        );
+
+        Label unlockInfo = new Label(
+                "The lock auto-expires 30 minutes after the last failed OTP attempt. " +
+                "A supervisor can override this lock manually."
+        );
+        unlockInfo.setWrapText(true);
+        unlockInfo.setStyle(
+                "-fx-font-size: 12px;" +
+                "-fx-text-fill: #7F1D1D;"
+        );
+
+        result.getChildren().addAll(
+                title,
+                createVerticalSpace(6),
+                detail,
+                createVerticalSpace(10),
+                unlockInfo
+        );
+
+        verify.setText("✓  Verify Voter");
+        verify.setDisable(false);
     }
 
     // =========================================================
@@ -1428,7 +1580,7 @@ public class OfflineVerification {
         }
     }
 
-    // =========================================================
+        // =========================================================
     // SUCCESS RESULT (ISSUED TOKEN)
     // =========================================================
 
@@ -1544,12 +1696,55 @@ public class OfflineVerification {
         HBox tokenBox = new HBox(8, tokenLabel, tokenValue, copyTokenButton);
         tokenBox.setAlignment(Pos.CENTER_LEFT);
 
+        // =========================================================
+        // OFFICER ACCOUNTABILITY SECTION
+        // Mirrors Form 17A — officer's identity stamped on the card
+        // =========================================================
+
+        // Divider
+        Region divider = new Region();
+        divider.setPrefHeight(1);
+        divider.setMaxWidth(Double.MAX_VALUE);
+        divider.setStyle("-fx-background-color: #BBF7D0;");
+
+        String officerName = (com.electrovotesuperx.config.SessionManager.officerName != null
+                && !com.electrovotesuperx.config.SessionManager.officerName.isBlank())
+                ? com.electrovotesuperx.config.SessionManager.officerName
+                : "Polling Officer";
+
+        String officerStation = (com.electrovotesuperx.config.SessionManager.officerStation != null
+                && !com.electrovotesuperx.config.SessionManager.officerStation.isBlank())
+                ? com.electrovotesuperx.config.SessionManager.officerStation
+                : "Polling Station";
+
+        String verifiedAt = java.time.LocalDateTime.now()
+                .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+
+        Label officerLine = new Label("Verified by: " + officerName + " \u2022 " + officerStation);
+        officerLine.setStyle(
+                "-fx-text-fill: #166534;" +
+                "-fx-font-size: 12px;" +
+                "-fx-font-weight: 700;"
+        );
+
+        Label timeLine = new Label("Time: " + verifiedAt);
+        timeLine.setStyle(
+                "-fx-text-fill: #4ADE80;" +
+                "-fx-font-size: 11.5px;" +
+                "-fx-font-weight: 600;"
+        );
+
         result.getChildren().addAll(
                 verifiedLabel,
                 voterLabel,
                 voterIdLabel,
                 createVerticalSpace(6),
-                tokenBox
+                tokenBox,
+                createVerticalSpace(8),
+                divider,
+                createVerticalSpace(6),
+                officerLine,
+                timeLine
         );
 
         verify.setText("✓  Voter Verified");

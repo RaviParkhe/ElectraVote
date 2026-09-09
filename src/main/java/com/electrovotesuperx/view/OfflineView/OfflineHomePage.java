@@ -128,20 +128,20 @@ public class OfflineHomePage {
                 // CARD 2 - MEMBERS
                 // =========================================================
 
-                VBox memberCard = createCard(
-                                "2",
-                                "Members",
-                                "Manage registered members and voter IDs",
-                                "#3B82F6",
-                                () -> Navigation.goTo(
-                                                new OfflineMemberPage().getScene()));
+                // VBox memberCard = createCard(
+                // "2",
+                // "Members",
+                // "Manage registered members and voter IDs",
+                // "#3B82F6",
+                // () -> Navigation.goTo(
+                // new OfflineMemberPage().getScene()));
 
                 // =========================================================
                 // CARD 3 - VERIFY
                 // =========================================================
 
                 VBox verifyCard = createCard(
-                                "3",
+                                "2",
                                 "Verify Voter",
                                 "Check voter eligibility and generate an authorization token",
                                 "#8B5CF6",
@@ -149,11 +149,11 @@ public class OfflineHomePage {
                                                 new OfflineVerification().getScene()));
 
                 // =========================================================
-                // CARD 4 - TOKEN / STATUS
+                // CARD 3 - TOKEN / STATUS
                 // =========================================================
 
                 VBox tokenCard = createCard(
-                                "4",
+                                "3",
                                 "Token / Status",
                                 "Complete voting and update the authorization status",
                                 "#F59E0B",
@@ -166,7 +166,7 @@ public class OfflineHomePage {
 
                 cards.getChildren().addAll(
                                 electionCard,
-                                memberCard,
+                                // memberCard,
                                 verifyCard,
                                 tokenCard);
 
